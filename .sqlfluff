@@ -1,0 +1,44 @@
+[sqlfluff]
+templater = dbt
+dialect = snowflake
+max_line_length = 120
+exclude_rules = RF04, ST06, AM04, ST07, RF01
+# RF01 excluded: sqlfluff cannot resolve dbt ref() targets, so it reports false
+# "reference not found" errors on every join.
+# AM04 excluded: select * from a CTE is intentional in staging models.
+
+[sqlfluff:indentation]
+tab_space_size = 4
+indented_joins = false
+indented_using_on = true
+template_blocks_indent = false
+
+[sqlfluff:templater:dbt]
+project_dir = ./
+profiles_dir = ./
+profile = sec_analytics
+target = dev
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:aliasing.table]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.column]
+aliasing = explicit
+
+[sqlfluff:rules:ambiguous.column_references]
+group_by_and_order_by_style = consistent

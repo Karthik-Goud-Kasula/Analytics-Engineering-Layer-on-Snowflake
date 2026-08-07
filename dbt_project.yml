@@ -1,0 +1,82 @@
+name: "sec_analytics"
+version: "1.0.0"
+config-version: 2
+
+profile: "sec_analytics"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages", "logs"]
+
+require-dbt-version: [">=1.7.0", "<2.0.0"]
+
+vars:
+  # Restricts dev/CI runs to recent filings so a full build costs seconds, not
+  # minutes. Overridden to 0 (no limit) in production -- see limit_data_in_dev().
+  dev_lookback_years: 3
+  # Fiscal years present in the loaded SEC datasets. Used for dim_date bounds.
+  min_fiscal_year: 2009
+  max_fiscal_year: 2026
+  # Tolerance for the balance-sheet identity test, in dollars. SEC filings round
+  # to the nearest unit, so exact equality produces false failures.
+  balance_sheet_tolerance: 1000
+
+models:
+  sec_analytics:
+    +materialized: view
+    +on_schema_change: append_new_columns
+
+    staging:
+      +schema: staging
+      +materialized: view
+      +tags: ["staging"]
+
+    intermediate:
+      +schema: intermediate
+      # Ephemeral would inline these into every downstream mart, and several are
+      # referenced 3+ times -- Snowflake would recompute the same scan each time.
+      +materialized: table
+      +tags: ["intermediate"]
+
+    marts:
+      +schema: marts
+      +materialized: table
+      core:
+        +tags: ["core", "daily"]
+      finance:
+        +tags: ["finance", "daily"]
+
+seeds:
+  sec_analytics:
+    +schema: seeds
+    +quote_columns: false
+    sic_sector_mapping:
+      +column_types:
+        sic_low: varchar(4)
+        sic_high: varchar(4)
+    financial_tag_mapping:
+      +column_types:
+        tag: varchar(256)
+
+snapshots:
+  sec_analytics:
+    +target_schema: snapshots
+    +strategy: check
+    +invalidate_hard_deletes: true
+
+tests:
+  sec_analytics:
+    +store_failures: true
+    +schema: test_failures
+    # Warn rather than error on the wide, low-severity tests so a single stale
+    # filing does not block a deploy. Critical tests override this per-test.
+    +severity: error
+
+on-run-end:
+  - "{{ grant_select_on_schemas(schemas, target.role) }}"

@@ -1,0 +1,48 @@
+# Copy to ~/.dbt/profiles.yml and fill in, or export the env vars below.
+# Never commit real credentials -- profiles.yml is in .gitignore.
+
+sec_analytics:
+  target: dev
+  outputs:
+
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      # Key-pair auth. Password auth also works but key-pair is what the CI
+      # service principal uses, so dev matches prod.
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: TRANSFORMER_DEV
+      database: SEC_ANALYTICS_DEV
+      warehouse: TRANSFORM_XS
+      # Personal dev schema so two engineers never collide.
+      schema: "dbt_{{ env_var('USER', 'local') }}"
+      threads: 8
+      client_session_keep_alive: false
+      query_tag: "dbt-dev"
+
+    ci:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key: "{{ env_var('SNOWFLAKE_PRIVATE_KEY') }}"
+      role: TRANSFORMER_CI
+      database: SEC_ANALYTICS_CI
+      warehouse: TRANSFORM_XS
+      # One schema per pull request, dropped when the PR closes.
+      schema: "pr_{{ env_var('DBT_CI_SCHEMA', '0') }}"
+      threads: 12
+      query_tag: "dbt-ci"
+
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key: "{{ env_var('SNOWFLAKE_PRIVATE_KEY') }}"
+      role: TRANSFORMER_PROD
+      database: SEC_ANALYTICS
+      warehouse: TRANSFORM_M
+      schema: analytics
+      threads: 16
+      query_tag: "dbt-prod"
