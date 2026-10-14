@@ -1,0 +1,89 @@
+name: Snowflake integration
+
+# Builds and tests the whole project against a real Snowflake account.
+#
+# Manual and opt-in: it only runs when started from the Actions tab, so pull
+# requests never depend on credentials. Prerequisites (README > Snowflake setup):
+#   1. snowflake/setup/01_account_setup.sql and 02_raw_tables.sql have been run;
+#   2. RAW_SEC is loaded once, e.g. `make load-sample TARGET=dev`;
+#   3. repository secrets SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER (sec_ci_svc) and
+#      SNOWFLAKE_PRIVATE_KEY are set (SNOWFLAKE_PRIVATE_KEY_PASSPHRASE optional).
+#
+# Every run writes to its own schemas (ci_<run id>_*) and drops them at the end,
+# even when the build fails. Nothing is deployed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: snowflake-integration
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: dbt build on Snowflake
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DBT_PROFILES_DIR: profiles
+      DBT_TARGET: ci
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+      SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE }}
+      SNOWFLAKE_ROLE: ${{ vars.SNOWFLAKE_ROLE || 'SEC_TRANSFORMER' }}
+      SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE || 'SEC_ANALYTICS_DEV' }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE || 'SEC_TRANSFORM_WH' }}
+    steps:
+      - name: Check required secrets
+        run: |
+          missing=""
+          for name in SNOWFLAKE_ACCOUNT SNOWFLAKE_USER SNOWFLAKE_PRIVATE_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing. See README > Snowflake setup."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: dbt deps
+        run: dbt deps
+
+      - name: dbt debug (connection check)
+        run: dbt debug --target ci
+
+      - name: dbt build
+        run: dbt build --target ci
+
+      - name: Source freshness
+        run: dbt source freshness --target ci
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dbt-snowflake-artifacts
+          path: |
+            target/run_results.json
+            target/manifest.json
+            logs/dbt.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Drop this run's schemas
+        if: always()
+        run: dbt run-operation drop_ci_schemas --target ci

@@ -1,0 +1,263 @@
+version: 2
+
+models:
+  - name: int_filings__deduplicated
+    description: >
+      One authoritative filing per (company, period end, base form type), chosen
+      from 10-K/10-Q filings that contain primary financial statements: the most
+      recently filed wins. Superseded filings are kept elsewhere for
+      mart_restatements.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["company_id", "period_end_date", "base_form_type"]
+    columns:
+      - name: filing_id
+        description: Accession number of the authoritative filing.
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('stg_sec__submissions')
+                field: filing_id
+      - name: company_id
+        description: CIK.
+        data_tests: [not_null]
+      - name: period_end_date
+        description: Period the filing reports on.
+      - name: base_form_type
+        description: 10-K or 10-Q.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["10-K", "10-Q"]
+      - name: form_type
+        description: Actual form of the winner (10-K/A when an amendment won).
+      - name: has_superseded_filings
+        description: True when another filing for the same company-period lost.
+
+  - name: int_facts__classified
+    description: >
+      Consolidated, current-period facts from 10-K/10-Q filings that are
+      presented on a primary statement, each classified to exactly one statement.
+      One row per fact_key; superseded filings included.
+    columns:
+      - name: fact_key
+        description: Grain key from stg_sec__numeric_facts.
+        data_tests: [not_null, unique]
+      - name: statement_name
+        description: income_statement, balance_sheet, cash_flow, comprehensive_income or equity.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["income_statement", "balance_sheet", "cash_flow", "comprehensive_income", "equity"]
+      - name: period_type
+        description: instant, quarter, annual or year_to_date (from duration_quarters).
+      - name: is_custom_tag
+        description: True for filer-defined tags; excluded from the cross-company pivots.
+      - name: is_authoritative_filing
+        description: True when the fact's filing is the one int_filings__deduplicated chose.
+
+  - name: int_facts__income_statement
+    description: >
+      Income statement concepts pivoted to columns. One row per (filing_id,
+      duration_quarters); every value in a row comes from the same filing.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["filing_id", "duration_quarters"]
+    columns:
+      - name: income_statement_key
+        description: Hash of filing_id and duration_quarters.
+        data_tests: [not_null, unique]
+      - name: duration_quarters
+        description: 1 = quarter, 2-3 = year to date, 4 = full year.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4]
+              config:
+                severity: warn
+      - name: revenue
+        description: Top-line revenue from the highest-priority mapped tag.
+        data_tests:
+          - not_null_proportion:
+              arguments:
+                at_least: 0.7
+              config:
+                severity: warn
+      - name: revenue_tag
+        description: The XBRL tag that supplied revenue (lineage).
+      - name: net_income_tag
+        description: The XBRL tag that supplied net income (lineage).
+      - name: is_gross_profit_derived
+        description: True when gross profit was computed as revenue minus cost of revenue.
+      - name: eps_basic
+        description: Basic EPS (reported in USD/shares).
+        data_tests:
+          - not_null_proportion:
+              arguments:
+                at_least: 0.5
+              config:
+                severity: warn
+
+  - name: int_facts__balance_sheet
+    description: Balance sheet concepts pivoted to columns. One row per filing.
+    columns:
+      - name: balance_sheet_key
+        description: Hash of filing_id.
+        data_tests: [not_null, unique]
+      - name: filing_id
+        description: Accession number.
+        data_tests: [not_null, unique]
+      - name: total_assets
+        description: Total assets.
+        data_tests:
+          - not_null_proportion:
+              arguments:
+                at_least: 0.9
+              config:
+                severity: warn
+      - name: total_debt
+        description: Current portion + short-term borrowings + non-current debt; NULL when none is tagged.
+
+  - name: int_facts__cash_flow
+    description: >
+      Cash flow concepts pivoted to columns. One row per (filing_id,
+      duration_quarters). 10-Q values are year to date.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["filing_id", "duration_quarters"]
+    columns:
+      - name: cash_flow_key
+        description: Hash of filing_id and duration_quarters.
+        data_tests: [not_null, unique]
+      - name: free_cash_flow
+        description: Operating cash flow minus capital expenditure; NULL unless both are reported.
+
+  - name: int_financials__annual
+    description: >
+      Income statement, balance sheet and cash flow of each authoritative 10-K,
+      joined on filing. One row per (company_id, fiscal_year).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["company_id", "fiscal_year"]
+    columns:
+      - name: source_filing_id
+        description: The 10-K or 10-K/A every value in the row came from.
+        data_tests: [not_null, unique]
+
+  - name: int_financials__quarterly
+    description: >
+      Quarterly income statement (Q1-Q3 reported, Q4 derived as annual minus
+      Q1-Q3). One row per (company_id, fiscal_year, fiscal_quarter).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["company_id", "fiscal_year", "fiscal_quarter"]
+    columns:
+      - name: quarterly_financials_key
+        description: Hash of company_id, fiscal_year and fiscal_quarter.
+        data_tests: [not_null, unique]
+      - name: fiscal_quarter
+        description: 1-4.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4]
+      - name: is_derived_q4
+        description: True for computed Q4 rows.
+      - name: has_complete_quarters
+        description: True when Q1, Q2 and Q3 were all reported for the fiscal year.
+
+unit_tests:
+  - name: test_dedup_ignores_amendment_without_statements
+    description: >
+      A Part III 10-K/A (no financial statements) must not replace the original
+      10-K, even though it is filed later and the original is flagged prevrpt.
+      A 10-K/A that does carry statements must win.
+    model: int_filings__deduplicated
+    given:
+      - input: ref('stg_sec__submissions')
+        rows:
+          - {filing_id: "a-original", company_id: 1, period_end_date: 2023-12-31, base_form_type: "10-K", form_type: "10-K", is_amendment: false, filed_date: 2024-02-20, accepted_at: "2024-02-20 16:00:00", is_subsequently_amended: true}
+          - {filing_id: "a-part3", company_id: 1, period_end_date: 2023-12-31, base_form_type: "10-K", form_type: "10-K/A", is_amendment: true, filed_date: 2024-03-28, accepted_at: "2024-03-28 16:00:00", is_subsequently_amended: false}
+          - {filing_id: "b-original", company_id: 2, period_end_date: 2023-12-31, base_form_type: "10-K", form_type: "10-K", is_amendment: false, filed_date: 2024-02-20, accepted_at: "2024-02-20 16:00:00", is_subsequently_amended: false}
+          - {filing_id: "b-restated", company_id: 2, period_end_date: 2023-12-31, base_form_type: "10-K", form_type: "10-K/A", is_amendment: true, filed_date: 2024-06-14, accepted_at: "2024-06-14 16:00:00", is_subsequently_amended: false}
+          - {filing_id: "c-20f", company_id: 3, period_end_date: 2023-12-31, base_form_type: "20-F", form_type: "20-F", is_amendment: false, filed_date: 2024-04-22, accepted_at: "2024-04-22 16:00:00", is_subsequently_amended: false}
+      - input: ref('stg_sec__presentation')
+        rows:
+          - {filing_id: "a-original", statement_code: "IS", is_parenthetical: false}
+          - {filing_id: "a-part3", statement_code: "CP", is_parenthetical: false}
+          - {filing_id: "b-original", statement_code: "IS", is_parenthetical: false}
+          - {filing_id: "b-restated", statement_code: "BS", is_parenthetical: false}
+          - {filing_id: "c-20f", statement_code: "IS", is_parenthetical: false}
+    expect:
+      rows:
+        - {filing_id: "a-original", company_id: 1, has_superseded_filings: false}
+        - {filing_id: "b-restated", company_id: 2, has_superseded_filings: true}
+
+  - name: test_income_statement_tag_priority_and_eps_unit
+    description: >
+      When two mapped tags report revenue, the higher-priority tag wins. EPS is
+      reported in USD/shares and must still be picked up. Custom tags are ignored.
+    model: int_facts__income_statement
+    given:
+      - input: ref('int_facts__classified')
+        rows:
+          - {filing_id: "f1", company_id: 1, period_end_date: 2023-12-31, duration_quarters: 4, period_type: "annual", statement_name: "income_statement", is_custom_tag: false, tag: "Revenues", unit_of_measure: "USD", fact_value: 482500000}
+          - {filing_id: "f1", company_id: 1, period_end_date: 2023-12-31, duration_quarters: 4, period_type: "annual", statement_name: "income_statement", is_custom_tag: false, tag: "RevenueFromContractWithCustomerExcludingAssessedTax", unit_of_measure: "USD", fact_value: 480000000}
+          - {filing_id: "f1", company_id: 1, period_end_date: 2023-12-31, duration_quarters: 4, period_type: "annual", statement_name: "income_statement", is_custom_tag: true, tag: "Revenues", unit_of_measure: "USD", fact_value: 1}
+          - {filing_id: "f1", company_id: 1, period_end_date: 2023-12-31, duration_quarters: 4, period_type: "annual", statement_name: "income_statement", is_custom_tag: false, tag: "EarningsPerShareBasic", unit_of_measure: "USD/shares", fact_value: 1.85}
+          - {filing_id: "f1", company_id: 1, period_end_date: 2023-12-31, duration_quarters: 4, period_type: "annual", statement_name: "income_statement", is_custom_tag: false, tag: "CostOfRevenue", unit_of_measure: "USD", fact_value: 96000000}
+      - input: ref('financial_tag_mapping')
+        rows:
+          - {tag: "RevenueFromContractWithCustomerExcludingAssessedTax", unit_of_measure: "USD", concept: "revenue", statement: "income_statement", priority: 1}
+          - {tag: "Revenues", unit_of_measure: "USD", concept: "revenue", statement: "income_statement", priority: 3}
+          - {tag: "CostOfRevenue", unit_of_measure: "USD", concept: "cost_of_revenue", statement: "income_statement", priority: 1}
+          - {tag: "EarningsPerShareBasic", unit_of_measure: "USD/shares", concept: "eps_basic", statement: "income_statement", priority: 1}
+    expect:
+      rows:
+        - {filing_id: "f1", revenue: 480000000, revenue_tag: "RevenueFromContractWithCustomerExcludingAssessedTax", eps_basic: 1.85, gross_profit: 384000000, is_gross_profit_derived: true}
+
+  - name: test_q4_derived_only_from_complete_quarters
+    description: >
+      Q4 = annual - (Q1 + Q2 + Q3) when all three quarters exist; no Q4 row is
+      produced when a quarter is missing; derived EPS is NULL.
+    model: int_financials__quarterly
+    given:
+      - input: ref('int_filings__deduplicated')
+        rows:
+          - {filing_id: "q1", company_id: 1, fiscal_year: 2023, fiscal_period: "Q1", base_form_type: "10-Q", period_end_date: 2023-03-31, filed_date: 2023-05-01}
+          - {filing_id: "q2", company_id: 1, fiscal_year: 2023, fiscal_period: "Q2", base_form_type: "10-Q", period_end_date: 2023-06-30, filed_date: 2023-08-01}
+          - {filing_id: "q3", company_id: 1, fiscal_year: 2023, fiscal_period: "Q3", base_form_type: "10-Q", period_end_date: 2023-09-30, filed_date: 2023-11-01}
+          - {filing_id: "x1", company_id: 2, fiscal_year: 2023, fiscal_period: "Q1", base_form_type: "10-Q", period_end_date: 2023-03-31, filed_date: 2023-05-01}
+          - {filing_id: "x3", company_id: 2, fiscal_year: 2023, fiscal_period: "Q3", base_form_type: "10-Q", period_end_date: 2023-09-30, filed_date: 2023-11-01}
+      - input: ref('int_facts__income_statement')
+        rows:
+          - {filing_id: "q1", duration_quarters: 1, revenue: 100, net_income: 10, eps_basic: 0.10}
+          - {filing_id: "q2", duration_quarters: 1, revenue: 110, net_income: 11, eps_basic: 0.11}
+          - {filing_id: "q2", duration_quarters: 2, revenue: 210, net_income: 21, eps_basic: 0.21}
+          - {filing_id: "q3", duration_quarters: 1, revenue: 120, net_income: null, eps_basic: 0.12}
+          - {filing_id: "x1", duration_quarters: 1, revenue: 50, net_income: 5}
+          - {filing_id: "x3", duration_quarters: 1, revenue: 55, net_income: 6}
+      - input: ref('int_financials__annual')
+        rows:
+          - {company_id: 1, fiscal_year: 2023, fiscal_year_end_date: 2023-12-31, source_filing_id: "k1", revenue: 470, net_income: 45}
+          - {company_id: 2, fiscal_year: 2023, fiscal_year_end_date: 2023-12-31, source_filing_id: "k2", revenue: 230, net_income: 22}
+    # Every expected row lists the same columns (dbt compares on that set).
+    expect:
+      rows:
+        - {company_id: 1, fiscal_quarter: 1, revenue: 100, net_income: 10, eps_basic: 0.10, is_derived_q4: false, has_complete_quarters: true}
+        - {company_id: 1, fiscal_quarter: 2, revenue: 110, net_income: 11, eps_basic: 0.11, is_derived_q4: false, has_complete_quarters: true}
+        - {company_id: 1, fiscal_quarter: 3, revenue: 120, net_income: null, eps_basic: 0.12, is_derived_q4: false, has_complete_quarters: true}
+        # Revenue is derived (470 - 330); net income is not, because Q3 net
+        # income is missing; per-share figures are never derived.
+        - {company_id: 1, fiscal_quarter: 4, revenue: 140, net_income: null, eps_basic: null, is_derived_q4: true, has_complete_quarters: true}
+        # Company 2 has no Q2, so no Q4 row at all.
+        - {company_id: 2, fiscal_quarter: 1, revenue: 50, net_income: 5, eps_basic: null, is_derived_q4: false, has_complete_quarters: false}
+        - {company_id: 2, fiscal_quarter: 3, revenue: 55, net_income: 6, eps_basic: null, is_derived_q4: false, has_complete_quarters: false}

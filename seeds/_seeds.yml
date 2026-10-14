@@ -1,0 +1,59 @@
+version: 2
+
+seeds:
+  - name: financial_tag_mapping
+    description: >
+      Maps US-GAAP XBRL tags to canonical concepts. When a filing reports
+      several tags for one concept, the lowest priority number wins. The unit
+      is part of the match (EPS is USD/shares). Adding a tag is a one-line
+      change plus `dbt seed`.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["tag", "unit_of_measure", "concept"]
+      # Two tags must never tie on priority for the same concept.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["concept", "priority"]
+    columns:
+      - name: tag
+        description: US-GAAP element name.
+        data_tests: [not_null]
+      - name: unit_of_measure
+        description: Unit the value must be reported in (USD or USD/shares).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["USD", "USD/shares"]
+      - name: concept
+        description: Canonical concept, used as the column name in the pivots.
+        data_tests: [not_null]
+      - name: statement
+        description: Statement the concept belongs to.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["income_statement", "balance_sheet", "cash_flow"]
+      - name: priority
+        description: 1 = preferred tag. Lower wins.
+        data_tests: [not_null]
+
+  - name: sic_sector_mapping
+    description: >
+      SIC major groups (two-digit ranges, e.g. 7300-7399 Business Services)
+      mapped to their division (sector) and major group name (industry group).
+      Source: the SIC Manual's division and major-group structure (OSHA).
+      Ranges must not overlap -- see assert_sic_ranges_do_not_overlap.
+    columns:
+      - name: sic_low
+        description: First SIC code in the range (inclusive).
+        data_tests: [not_null, unique]
+      - name: sic_high
+        description: Last SIC code in the range (inclusive).
+        data_tests: [not_null, unique]
+      - name: sector
+        description: SIC division name.
+        data_tests: [not_null]
+      - name: industry_group
+        description: SIC major group name.
+        data_tests: [not_null]

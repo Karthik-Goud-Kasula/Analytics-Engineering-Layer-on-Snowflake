@@ -1,0 +1,53 @@
+# dbt connection profiles. Committed on purpose: every credential is read from an
+# environment variable (or from .env, which dbt loads automatically), so this file
+# contains no secrets. scripts/check_project.py fails CI if a literal credential
+# ever appears here.
+#
+# The Makefile and CI point dbt at this directory (DBT_PROFILES_DIR=profiles).
+# Without make:  export DBT_PROFILES_DIR=profiles
+
+sec_analytics:
+  target: "{{ env_var('DBT_TARGET', 'local') }}"
+  outputs:
+
+    # Local, offline target: DuckDB file loaded with the synthetic sample data.
+    # Used for development without a Snowflake account and for CI on every PR.
+    local:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'data/warehouse/sec_analytics.duckdb') }}"
+      schema: analytics
+      threads: 4
+
+    # Personal Snowflake development target. Key-pair auth only.
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'SEC_TRANSFORMER') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'SEC_ANALYTICS_DEV') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'SEC_TRANSFORM_WH') }}"
+      # Personal schema prefix so two developers never overwrite each other.
+      schema: "{{ env_var('DBT_SNOWFLAKE_SCHEMA', 'dbt_dev') }}"
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: sec_analytics_dev
+
+    # Snowflake target for the manual integration workflow
+    # (.github/workflows/snowflake-integration.yml). The private key is passed as
+    # PEM text from a GitHub secret rather than a file path, and every run writes
+    # to its own schema, dropped at the end of the run.
+    ci:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key: "{{ env_var('SNOWFLAKE_PRIVATE_KEY') }}"
+      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'SEC_TRANSFORMER') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'SEC_ANALYTICS_DEV') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'SEC_TRANSFORM_WH') }}"
+      schema: "ci_{{ env_var('GITHUB_RUN_ID', 'local') }}"
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: sec_analytics_ci

@@ -1,0 +1,9 @@
+version: 2
+
+analyses:
+  - name: sector_peer_comparison
+    description: Each company's operating margin against its sector median and quartiles.
+  - name: material_restatements
+    description: Material restatements ranked by the size of the net income change.
+  - name: revenue_growth_leaders
+    description: Fastest revenue growth per fiscal year, in analysis-ready years only.

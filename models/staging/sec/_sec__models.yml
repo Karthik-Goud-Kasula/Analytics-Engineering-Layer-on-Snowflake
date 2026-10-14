@@ -1,0 +1,280 @@
+version: 2
+
+models:
+  - name: stg_sec__submissions
+    description: >
+      One row per SEC submission (filing), renamed and typed. Includes every
+      form type and every amendment; nothing is filtered here.
+    columns:
+      - name: filing_id
+        description: SEC accession number (adsh). Natural key of a filing.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_id
+        description: Central Index Key (CIK) of the registrant. Natural key of a company.
+        data_type: bigint
+        data_tests: [not_null]
+      - name: company_name
+        description: Registrant's conformed name as of the filing date.
+        data_type: varchar
+      - name: sic_code
+        description: Four-digit Standard Industrial Classification code as of the filing date. Nullable.
+        data_type: integer
+      - name: business_country_code
+        description: Country of the business address (ISO 3166-1).
+        data_type: varchar
+      - name: business_state_code
+        description: State or province of the business address (US/CA only).
+        data_type: varchar
+      - name: business_city
+        description: City of the business address.
+        data_type: varchar
+      - name: incorporation_country_code
+        description: Country of incorporation.
+        data_type: varchar
+      - name: incorporation_state_code
+        description: State or province of incorporation (US/CA only).
+        data_type: varchar
+      - name: former_company_name
+        description: Most recent former name, if the registrant has changed its name.
+        data_type: varchar
+      - name: name_changed_date
+        description: Date of the change from the former name.
+        data_type: date
+      - name: filer_status_code
+        description: Filer status, e.g. 1-LAF (large accelerated) ... 5-SML (smaller reporting).
+        data_type: varchar
+      - name: is_well_known_seasoned_issuer
+        description: True if the filer is a Well Known Seasoned Issuer.
+        data_type: boolean
+      - name: fiscal_year_end_mmdd
+        description: Fiscal year end as MMDD, e.g. 1231 or 0630.
+        data_type: varchar
+      - name: form_type
+        description: Submission type, e.g. 10-K, 10-Q, 10-K/A, 20-F.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: base_form_type
+        description: Form type with any /A amendment suffix removed (10-K/A -> 10-K).
+        data_type: varchar
+      - name: is_amendment
+        description: True if the form type ends in /A.
+        data_type: boolean
+      - name: period_end_date
+        description: Balance sheet date of the reporting period (parsed from YYYYMMDD).
+        data_type: date
+        data_tests: [not_null]
+      - name: fiscal_year
+        description: Fiscal year focus as reported by the filer.
+        data_type: integer
+      - name: fiscal_period
+        description: Fiscal period focus (FY, Q1, Q2, Q3, Q4).
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["FY", "Q1", "Q2", "Q3", "Q4"]
+              config:
+                severity: warn
+      - name: filed_date
+        description: Date the filing was filed with the SEC.
+        data_type: date
+        data_tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                # A filing submitted before its period ended means a date
+                # parsing bug -- or, rarely, a filer error, hence the threshold.
+                expression: ">= period_end_date"
+              config:
+                warn_if: ">0"
+                error_if: ">100"
+      - name: accepted_at
+        description: EDGAR acceptance timestamp (US Eastern time, no offset in the source).
+        data_type: timestamp
+      - name: is_subsequently_amended
+        description: SEC 'prevrpt' flag. True if the filing was amended before the data set's cut-off.
+        data_type: boolean
+      - name: has_detailed_tagging
+        description: True if footnotes and schedules are tagged at the detailed level.
+        data_type: boolean
+      - name: xbrl_instance_name
+        description: File name of the XBRL instance document.
+        data_type: varchar
+      - name: registrant_count
+        description: Number of CIKs included in the submission (co-registrants).
+        data_type: integer
+      - name: additional_ciks
+        description: Space-delimited CIKs of co-registrants, if any.
+        data_type: varchar
+      - name: source_quarter
+        description: SEC data set quarter the row was loaded from, e.g. 2024q1.
+        data_type: varchar
+      - name: loaded_at
+        description: When the loader wrote the row.
+        data_type: timestamp
+
+  - name: stg_sec__numeric_facts
+    description: >
+      One row per numeric XBRL fact, at the SEC's eight-column grain. Includes
+      every filing, every tag (standard and custom), comparatives, segment rows
+      and co-registrant rows. Downstream models decide what to keep.
+    columns:
+      - name: fact_key
+        description: >
+          Hash of the eight grain columns (adsh, tag, version, ddate, qtrs, uom,
+          segments, coreg). Its uniqueness test IS the grain test.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: filing_id
+        description: Accession number of the filing that reported the fact.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sec__submissions')
+                field: filing_id
+      - name: tag
+        description: XBRL element name, e.g. NetIncomeLoss.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: tag_version
+        description: Taxonomy version (e.g. us-gaap/2023), or the accession number for custom tags.
+        data_type: varchar
+      - name: period_end_date
+        description: End date of the value, rounded by the SEC to the nearest month end.
+        data_type: date
+        data_tests: [not_null]
+      - name: duration_quarters
+        description: Quarters the value covers. 0 = point in time (balance sheet), 1 = one quarter, 4 = one year; 2-3 = year to date.
+        data_type: integer
+        data_tests: [not_null]
+      - name: unit_of_measure
+        description: Unit, e.g. USD or USD/shares.
+        data_type: varchar
+      - name: segments
+        description: Axis/member dimensions. NULL means no breakdown (the consolidated figure).
+        data_type: varchar
+      - name: coregistrant
+        description: Co-registrant or related entity. NULL means the consolidated registrant.
+        data_type: varchar
+      - name: is_consolidated
+        description: True when the fact has neither segments nor a co-registrant.
+        data_type: boolean
+      - name: fact_value
+        description: Value as a decimal. NULL when the source value is empty (nil) or unparseable.
+        data_type: decimal(28,4)
+      - name: fact_value_raw
+        description: Value exactly as published, kept to diagnose parse failures.
+        data_type: varchar
+      - name: footnote
+        description: Footnote text attached to the value, if any.
+        data_type: varchar
+      - name: source_quarter
+        description: SEC data set quarter the row was loaded from.
+        data_type: varchar
+      - name: loaded_at
+        description: When the loader wrote the row. The incremental watermark for fct_financial_facts.
+        data_type: timestamp
+
+  - name: stg_sec__tags
+    description: >
+      One row per XBRL tag and taxonomy version. Deduplicated across quarterly
+      files (the SEC repeats standard tags in every quarter).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["tag", "tag_version"]
+    columns:
+      - name: tag
+        description: XBRL element name.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: tag_version
+        description: Taxonomy version, or the accession number for custom tags.
+        data_type: varchar
+        data_tests: [not_null]
+      - name: is_custom
+        description: True for a filer-defined (custom) tag.
+        data_type: boolean
+      - name: is_abstract
+        description: True for a grouping header that never carries a value.
+        data_type: boolean
+      - name: data_type
+        description: XBRL data type, e.g. monetary or perShare.
+        data_type: varchar
+      - name: instant_or_duration
+        description: I = point in time, D = duration.
+        data_type: varchar
+      - name: natural_balance
+        description: C (credit) or D (debit) for monetary tags.
+        data_type: varchar
+      - name: tag_label
+        description: Standard label of the tag.
+        data_type: varchar
+      - name: tag_documentation
+        description: Definition of the tag.
+        data_type: varchar
+      - name: source_quarter
+        description: Quarter the retained copy of the tag came from.
+        data_type: varchar
+      - name: loaded_at
+        description: When the retained copy was loaded.
+        data_type: timestamp
+
+  - name: stg_sec__presentation
+    description: One row per rendered statement line (filing, report, line).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["filing_id", "report_number", "line_number"]
+    columns:
+      - name: filing_id
+        description: Accession number.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sec__submissions')
+                field: filing_id
+      - name: report_number
+        description: Report (statement) number within the filing.
+        data_type: integer
+      - name: line_number
+        description: Line order within the report.
+        data_type: integer
+      - name: statement_code
+        description: BS, IS, CF, EQ, CI, SI (schedule of investments), UN (unclassifiable) or CP (cover page).
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["BS", "IS", "CF", "EQ", "CI", "SI", "UN", "CP"]
+              config:
+                severity: warn
+      - name: is_parenthetical
+        description: True for a parenthetical line, e.g. "net of allowance of $1m". Not a line item.
+        data_type: boolean
+      - name: rendered_file_type
+        description: H = rendered from .htm, X = from .xml.
+        data_type: varchar
+      - name: tag
+        description: Tag presented on the line.
+        data_type: varchar
+      - name: tag_version
+        description: Taxonomy version of the tag.
+        data_type: varchar
+      - name: presented_label
+        description: Label shown on the statement line.
+        data_type: varchar
+      - name: is_negated
+        description: True if the line displays the value with its sign flipped.
+        data_type: boolean
+      - name: source_quarter
+        description: Quarter the row was loaded from.
+        data_type: varchar
+      - name: loaded_at
+        description: When the row was loaded.
+        data_type: timestamp

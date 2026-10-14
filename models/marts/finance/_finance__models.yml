@@ -1,0 +1,696 @@
+version: 2
+
+models:
+  - name: fct_company_financials_annual
+    description: >
+      Primary analytical table. One row per company per fiscal year: income
+      statement, balance sheet and cash flow from that year's authoritative 10-K
+      (or 10-K/A). Sector is point-in-time (as of the filing). NULL means not
+      reported, never zero.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["cik", "fiscal_year"]
+      # No fan-out and no dropped rows from the dimension joins.
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('int_financials__annual')
+    columns:
+      - name: annual_financials_key
+        description: Surrogate key (hash of CIK and fiscal year).
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_key
+        description: Key in dim_company.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: company_history_key
+        description: Key of the dim_company_history version current when the 10-K was accepted.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company_history')
+                field: company_history_key
+      - name: filing_key
+        description: Key of the source filing in dim_filing.
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_filing')
+                field: filing_key
+      - name: cik
+        description: SEC Central Index Key.
+        data_type: bigint
+      - name: company_name
+        description: Current company name.
+        data_type: varchar
+      - name: sector
+        description: SIC division as of the filing.
+        data_type: varchar
+      - name: industry_group
+        description: SIC major group as of the filing.
+        data_type: varchar
+      - name: fiscal_year
+        description: Fiscal year as labelled by the filer.
+        data_type: integer
+      - name: fiscal_year_end_date
+        description: Balance sheet date of the fiscal year.
+        data_type: date
+      - name: filed_date
+        description: Filing date of the source 10-K.
+        data_type: date
+      - name: source_filing_id
+        description: Accession number of the 10-K or 10-K/A all values came from.
+        data_type: varchar
+      - name: source_form_type
+        description: 10-K or 10-K/A.
+        data_type: varchar
+      - name: is_from_amendment
+        description: True when the authoritative filing is an amendment (restated figures).
+        data_type: boolean
+      - name: revenue
+        description: Total revenue. NULL if no mapped revenue tag was reported (not zero revenue).
+        data_type: decimal(28,4)
+        data_tests:
+          - not_null_proportion:
+              arguments:
+                at_least: 0.8
+              config:
+                severity: warn
+      - name: revenue_tag
+        description: XBRL tag that supplied revenue.
+        data_type: varchar
+      - name: cost_of_revenue
+        description: Cost of revenue / cost of goods sold.
+        data_type: decimal(28,4)
+      - name: gross_profit
+        description: Gross profit, reported or derived as revenue minus cost of revenue.
+        data_type: decimal(28,4)
+      - name: operating_expenses
+        description: Total operating expenses as reported.
+        data_type: decimal(28,4)
+      - name: research_and_development
+        description: R&D expense. NULL when not reported separately (common outside tech).
+        data_type: decimal(28,4)
+      - name: sga_expense
+        description: Selling, general and administrative expense.
+        data_type: decimal(28,4)
+      - name: operating_income
+        description: Operating income (loss).
+        data_type: decimal(28,4)
+      - name: interest_expense
+        description: Interest expense.
+        data_type: decimal(28,4)
+      - name: pretax_income
+        description: Income (loss) before income taxes.
+        data_type: decimal(28,4)
+      - name: income_tax_expense
+        description: Income tax expense (benefit).
+        data_type: decimal(28,4)
+      - name: net_income
+        description: Net income (loss) attributable to the parent.
+        data_type: decimal(28,4)
+      - name: net_income_tag
+        description: XBRL tag that supplied net income.
+        data_type: varchar
+      - name: eps_basic
+        description: Basic earnings per share (USD).
+        data_type: decimal(28,4)
+      - name: eps_diluted
+        description: Diluted earnings per share (USD).
+        data_type: decimal(28,4)
+      - name: cash_and_equivalents
+        description: Cash and cash equivalents at fiscal year end.
+        data_type: decimal(28,4)
+      - name: short_term_investments
+        description: Short-term investments / marketable securities.
+        data_type: decimal(28,4)
+      - name: accounts_receivable
+        description: Accounts receivable, net.
+        data_type: decimal(28,4)
+      - name: inventory
+        description: Inventory, net. NULL for most service businesses.
+        data_type: decimal(28,4)
+      - name: total_current_assets
+        description: Total current assets. NULL for unclassified balance sheets (e.g. banks).
+        data_type: decimal(28,4)
+      - name: total_assets
+        description: Total assets.
+        data_type: decimal(28,4)
+      - name: total_current_liabilities
+        description: Total current liabilities.
+        data_type: decimal(28,4)
+      - name: total_liabilities
+        description: Total liabilities (many filers do not report this subtotal).
+        data_type: decimal(28,4)
+      - name: total_debt
+        description: Current + short-term + non-current debt. NULL when no debt is tagged.
+        data_type: decimal(28,4)
+      - name: total_equity
+        description: Stockholders' equity attributable to the parent.
+        data_type: decimal(28,4)
+      - name: operating_cash_flow
+        description: Net cash from operating activities.
+        data_type: decimal(28,4)
+      - name: investing_cash_flow
+        description: Net cash from investing activities.
+        data_type: decimal(28,4)
+      - name: financing_cash_flow
+        description: Net cash from financing activities.
+        data_type: decimal(28,4)
+      - name: capital_expenditure
+        description: Payments for property, plant and equipment (positive).
+        data_type: decimal(28,4)
+      - name: free_cash_flow
+        description: Operating cash flow minus capital expenditure.
+        data_type: decimal(28,4)
+      - name: dividends_paid
+        description: Dividends paid.
+        data_type: decimal(28,4)
+      - name: share_repurchases
+        description: Payments for repurchase of common stock.
+        data_type: decimal(28,4)
+      - name: has_revenue
+        description: True when revenue is reported.
+        data_type: boolean
+      - name: has_income_statement
+        description: True when any income statement concept was found.
+        data_type: boolean
+      - name: has_balance_sheet
+        description: True when any balance sheet concept was found.
+        data_type: boolean
+      - name: has_cash_flow
+        description: True when any annual cash flow concept was found.
+        data_type: boolean
+      - name: balance_sheet_balances
+        description: >
+          Assets = liabilities + equity within var('balance_sheet_tolerance_pct')
+          of assets. NULL when a component is not reported.
+        data_type: boolean
+
+  - name: fct_financial_ratios
+    description: >
+      Profitability, return, liquidity, leverage, efficiency and cash-conversion
+      ratios. One row per company-year with revenue. Ratios are fractions
+      (0.25 = 25%); NULL when undefined (zero denominator) or uninterpretable
+      (e.g. ROE on negative equity).
+    columns:
+      - name: annual_financials_key
+        description: Key of the source row in fct_company_financials_annual.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('fct_company_financials_annual')
+                field: annual_financials_key
+      - name: company_key
+        description: Key in dim_company.
+        data_type: varchar
+      - name: cik
+        description: SEC Central Index Key.
+        data_type: bigint
+      - name: company_name
+        description: Current company name.
+        data_type: varchar
+      - name: sector
+        description: SIC division as of the filing.
+        data_type: varchar
+      - name: industry_group
+        description: SIC major group as of the filing.
+        data_type: varchar
+      - name: fiscal_year
+        description: Fiscal year.
+        data_type: integer
+      - name: fiscal_year_end_date
+        description: Fiscal year end date.
+        data_type: date
+      - name: gross_margin
+        description: Gross profit / revenue.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -10
+                max_value: 1
+              config:
+                severity: warn
+      - name: operating_margin
+        description: Operating income / revenue.
+        data_type: double
+      - name: net_margin
+        description: Net income / revenue.
+        data_type: double
+      - name: fcf_margin
+        description: Free cash flow / revenue.
+        data_type: double
+      - name: rd_intensity
+        description: R&D expense / revenue.
+        data_type: double
+      - name: sga_ratio
+        description: SG&A expense / revenue.
+        data_type: double
+      - name: return_on_equity
+        description: Net income / equity. NULL when equity <= 0.
+        data_type: double
+      - name: return_on_assets
+        description: Net income / total assets. NULL when assets <= 0.
+        data_type: double
+      - name: return_on_capital
+        description: Operating income / (debt + equity). NULL when debt is not reported or capital <= 0.
+        data_type: double
+      - name: current_ratio
+        description: Current assets / current liabilities.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1000
+              config:
+                severity: warn
+      - name: quick_ratio
+        description: (Current assets - inventory) / current liabilities.
+        data_type: double
+      - name: cash_ratio
+        description: (Cash + short-term investments) / current liabilities.
+        data_type: double
+      - name: debt_to_equity
+        description: Total debt / equity. NULL when equity <= 0 or debt not reported.
+        data_type: double
+      - name: debt_to_assets
+        description: Total debt / total assets.
+        data_type: double
+      - name: interest_coverage
+        description: Operating income / interest expense. NULL when no interest expense.
+        data_type: double
+      - name: asset_turnover
+        description: Revenue / total assets (year-end).
+        data_type: double
+      - name: receivables_turnover
+        description: Revenue / accounts receivable (year-end).
+        data_type: double
+      - name: inventory_turnover
+        description: Cost of revenue / inventory. NULL when no inventory.
+        data_type: double
+      - name: cash_conversion_ratio
+        description: Operating cash flow / net income. NULL when net income <= 0.
+        data_type: double
+      - name: capex_intensity
+        description: Capital expenditure / revenue.
+        data_type: double
+      - name: revenue
+        description: Revenue (context for filtering).
+        data_type: decimal(28,4)
+      - name: net_income
+        description: Net income (context).
+        data_type: decimal(28,4)
+      - name: total_assets
+        description: Total assets (context).
+        data_type: decimal(28,4)
+      - name: total_equity
+        description: Equity (context).
+        data_type: decimal(28,4)
+      - name: has_balance_sheet
+        description: True when a balance sheet was found.
+        data_type: boolean
+      - name: has_cash_flow
+        description: True when a cash flow statement was found.
+        data_type: boolean
+
+  - name: fct_yoy_growth
+    description: >
+      Year-over-year growth per company-year, against fiscal_year - 1 exactly
+      (a missing year never produces a two-year change). Growth rates are
+      fractions, NULL when the prior-year base is zero or negative.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('fct_company_financials_annual')
+    columns:
+      - name: annual_financials_key
+        description: Key of the current-year row in fct_company_financials_annual.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_key
+        description: Key in dim_company.
+        data_type: varchar
+      - name: cik
+        description: SEC Central Index Key.
+        data_type: bigint
+      - name: company_name
+        description: Current company name.
+        data_type: varchar
+      - name: sector
+        description: SIC division as of the filing.
+        data_type: varchar
+      - name: fiscal_year
+        description: Fiscal year.
+        data_type: integer
+      - name: has_prior_year
+        description: True when the immediately preceding fiscal year is loaded.
+        data_type: boolean
+      - name: revenue
+        description: Revenue this year.
+        data_type: decimal(28,4)
+      - name: prior_revenue
+        description: Revenue in the prior fiscal year.
+        data_type: decimal(28,4)
+      - name: revenue_growth_rate
+        description: (revenue - prior) / prior.
+        data_type: double
+      - name: operating_income
+        description: Operating income this year.
+        data_type: decimal(28,4)
+      - name: prior_operating_income
+        description: Operating income in the prior year.
+        data_type: decimal(28,4)
+      - name: operating_income_growth_rate
+        description: Growth in operating income; NULL when the prior year was a loss.
+        data_type: double
+      - name: net_income
+        description: Net income this year.
+        data_type: decimal(28,4)
+      - name: prior_net_income
+        description: Net income in the prior year.
+        data_type: decimal(28,4)
+      - name: net_income_growth_rate
+        description: Growth in net income; NULL when the prior year was a loss.
+        data_type: double
+      - name: operating_cash_flow
+        description: Operating cash flow this year.
+        data_type: decimal(28,4)
+      - name: prior_operating_cash_flow
+        description: Operating cash flow in the prior year.
+        data_type: decimal(28,4)
+      - name: operating_cash_flow_growth_rate
+        description: Growth in operating cash flow.
+        data_type: double
+      - name: total_assets
+        description: Total assets this year.
+        data_type: decimal(28,4)
+      - name: prior_total_assets
+        description: Total assets in the prior year.
+        data_type: decimal(28,4)
+      - name: total_assets_growth_rate
+        description: Growth in total assets.
+        data_type: double
+
+  - name: fct_company_financials_quarterly
+    description: >
+      Quarterly income statement per company. Q1-Q3 reported, Q4 derived
+      (annual minus Q1-Q3) when all three quarters exist. Filter on
+      is_derived_q4 and has_complete_quarters before trend analysis.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: ["cik", "fiscal_year", "fiscal_quarter"]
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('int_financials__quarterly')
+    columns:
+      - name: quarterly_financials_key
+        description: Surrogate key (hash of CIK, fiscal year, fiscal quarter).
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_key
+        description: Key in dim_company.
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: cik
+        description: SEC Central Index Key.
+        data_type: bigint
+      - name: company_name
+        description: Current company name.
+        data_type: varchar
+      - name: fiscal_year
+        description: Fiscal year.
+        data_type: integer
+      - name: fiscal_quarter
+        description: Fiscal quarter, 1-4.
+        data_type: integer
+      - name: period_end_date
+        description: Quarter end date.
+        data_type: date
+      - name: source_filing_id
+        description: 10-Q for Q1-Q3; the annual 10-K for a derived Q4.
+        data_type: varchar
+      - name: revenue
+        description: Revenue for the quarter.
+        data_type: decimal(28,4)
+      - name: cost_of_revenue
+        description: Cost of revenue for the quarter.
+        data_type: decimal(28,4)
+      - name: gross_profit
+        description: Gross profit for the quarter.
+        data_type: decimal(28,4)
+      - name: operating_income
+        description: Operating income for the quarter.
+        data_type: decimal(28,4)
+      - name: net_income
+        description: Net income for the quarter.
+        data_type: decimal(28,4)
+      - name: eps_basic
+        description: Basic EPS. NULL for derived Q4 (not additive).
+        data_type: decimal(28,4)
+      - name: eps_diluted
+        description: Diluted EPS. NULL for derived Q4.
+        data_type: decimal(28,4)
+      - name: is_derived_q4
+        description: True when the row is computed, not reported.
+        data_type: boolean
+      - name: has_complete_quarters
+        description: True when Q1-Q3 were all reported for the fiscal year.
+        data_type: boolean
+      - name: prior_year_revenue
+        description: Revenue in the same quarter of the prior fiscal year.
+        data_type: decimal(28,4)
+      - name: revenue_yoy_growth_rate
+        description: Growth against the same quarter of the prior year.
+        data_type: double
+
+  - name: mart_sector_benchmarks
+    description: >
+      Median and 25th/75th percentile of key ratios by sector and fiscal year.
+      Sector-years with fewer than var('min_companies_per_benchmark') companies
+      are excluded.
+    columns:
+      - name: sector_benchmark_key
+        description: Surrogate key (hash of sector and fiscal year).
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: sector
+        description: SIC division.
+        data_type: varchar
+      - name: fiscal_year
+        description: Fiscal year.
+        data_type: integer
+      - name: company_count
+        description: Companies with revenue in the sector-year.
+        data_type: bigint
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: "{{ var('min_companies_per_benchmark') }}"
+      - name: median_gross_margin
+        description: Median gross margin.
+        data_type: double
+      - name: p25_gross_margin
+        description: 25th percentile gross margin.
+        data_type: double
+      - name: p75_gross_margin
+        description: 75th percentile gross margin.
+        data_type: double
+      - name: median_operating_margin
+        description: Median operating margin.
+        data_type: double
+      - name: p25_operating_margin
+        description: 25th percentile operating margin.
+        data_type: double
+      - name: p75_operating_margin
+        description: 75th percentile operating margin.
+        data_type: double
+      - name: median_net_margin
+        description: Median net margin.
+        data_type: double
+      - name: p25_net_margin
+        description: 25th percentile net margin.
+        data_type: double
+      - name: p75_net_margin
+        description: 75th percentile net margin.
+        data_type: double
+      - name: median_return_on_equity
+        description: Median ROE (companies with positive equity).
+        data_type: double
+      - name: p25_return_on_equity
+        description: 25th percentile ROE.
+        data_type: double
+      - name: p75_return_on_equity
+        description: 75th percentile ROE.
+        data_type: double
+      - name: median_current_ratio
+        description: Median current ratio.
+        data_type: double
+      - name: p25_current_ratio
+        description: 25th percentile current ratio.
+        data_type: double
+      - name: p75_current_ratio
+        description: 75th percentile current ratio.
+        data_type: double
+      - name: median_debt_to_equity
+        description: Median debt-to-equity.
+        data_type: double
+      - name: p25_debt_to_equity
+        description: 25th percentile debt-to-equity.
+        data_type: double
+      - name: p75_debt_to_equity
+        description: 75th percentile debt-to-equity.
+        data_type: double
+      - name: median_revenue
+        description: Median revenue.
+        data_type: decimal(28,4)
+
+  - name: mart_restatements
+    description: >
+      Amendments that re-filed financial statements, compared with the original
+      filing for the same company and period. One row per amending filing.
+    columns:
+      - name: restatement_key
+        description: Surrogate key (hash of the amending accession number).
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_key
+        description: Key in dim_company.
+        data_type: varchar
+      - name: cik
+        description: SEC Central Index Key.
+        data_type: bigint
+      - name: company_name
+        description: Current company name.
+        data_type: varchar
+      - name: base_form_type
+        description: 10-K or 10-Q.
+        data_type: varchar
+      - name: fiscal_year
+        description: Fiscal year of the amended period.
+        data_type: integer
+      - name: fiscal_period
+        description: Fiscal period of the amended period.
+        data_type: varchar
+      - name: period_end_date
+        description: Period end date.
+        data_type: date
+      - name: original_filing_id
+        description: First filing for the period.
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_filing')
+                field: filing_id
+      - name: amended_filing_id
+        description: The amending filing.
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_filing')
+                field: filing_id
+      - name: amended_form_type
+        description: Form type of the amendment (usually 10-K/A or 10-Q/A).
+        data_type: varchar
+      - name: original_filed_date
+        description: Filing date of the original.
+        data_type: date
+      - name: amended_filed_date
+        description: Filing date of the amendment.
+        data_type: date
+      - name: days_until_restatement
+        description: Days between the original and the amendment.
+        data_type: bigint
+      - name: original_revenue
+        description: Revenue as originally reported.
+        data_type: decimal(28,4)
+      - name: restated_revenue
+        description: Revenue as restated.
+        data_type: decimal(28,4)
+      - name: revenue_change
+        description: Restated minus original revenue.
+        data_type: decimal(28,4)
+      - name: revenue_change_rate
+        description: Revenue change / |original revenue|.
+        data_type: double
+      - name: original_net_income
+        description: Net income as originally reported.
+        data_type: decimal(28,4)
+      - name: restated_net_income
+        description: Net income as restated.
+        data_type: decimal(28,4)
+      - name: net_income_change
+        description: Restated minus original net income.
+        data_type: decimal(28,4)
+      - name: net_income_change_rate
+        description: Net income change / |original net income|.
+        data_type: double
+      - name: original_total_assets
+        description: Total assets as originally reported.
+        data_type: decimal(28,4)
+      - name: restated_total_assets
+        description: Total assets as restated.
+        data_type: decimal(28,4)
+      - name: original_total_equity
+        description: Equity as originally reported.
+        data_type: decimal(28,4)
+      - name: restated_total_equity
+        description: Equity as restated.
+        data_type: decimal(28,4)
+      - name: is_material_restatement
+        description: True when revenue or net income moved by more than var('materiality_threshold').
+        data_type: boolean
+
+  - name: mart_data_quality_summary
+    description: >
+      Coverage of the annual financials by fiscal year, and whether each year
+      is ready for cross-company analysis.
+    columns:
+      - name: fiscal_year
+        description: Fiscal year.
+        data_type: integer
+        data_tests: [not_null, unique]
+      - name: annual_report_count
+        description: Companies with an authoritative annual report.
+        data_type: bigint
+      - name: amended_report_count
+        description: Of those, how many come from an amendment.
+        data_type: bigint
+      - name: revenue_coverage
+        description: Share of annual reports with revenue.
+        data_type: double
+      - name: balance_sheet_coverage
+        description: Share with a balance sheet.
+        data_type: double
+      - name: cash_flow_coverage
+        description: Share with a cash flow statement.
+        data_type: double
+      - name: balance_sheet_checkable_count
+        description: Reports where assets, liabilities and equity are all present.
+        data_type: bigint
+      - name: unbalanced_balance_sheet_count
+        description: Checkable reports where A != L + E beyond tolerance.
+        data_type: bigint
+      - name: is_analysis_ready
+        description: Revenue and balance sheet coverage both meet var('analysis_ready_min_coverage').
+        data_type: boolean
