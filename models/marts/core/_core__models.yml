@@ -1,0 +1,289 @@
+version: 2
+
+models:
+  - name: dim_company
+    description: >
+      Company dimension with current attributes (Type 1). One row per company.
+      For attributes as of a past date, use dim_company_history.
+    columns:
+      - name: company_key
+        description: Surrogate key (hash of CIK). Join target for facts.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: cik
+        description: SEC Central Index Key, the company's natural key.
+        data_type: bigint
+        data_tests: [not_null, unique]
+      - name: cik_padded
+        description: CIK as the 10-digit zero-padded string EDGAR URLs use.
+        data_type: varchar
+      - name: company_name
+        description: Current conformed company name.
+        data_type: varchar
+      - name: sic_code
+        description: Current four-digit SIC code.
+        data_type: integer
+      - name: sector
+        description: SIC division of the current SIC code, or 'Unclassified'.
+        data_type: varchar
+      - name: industry_group
+        description: SIC major group of the current SIC code, or 'Unclassified'.
+        data_type: varchar
+      - name: incorporation_state_code
+        description: State of incorporation (US/CA).
+        data_type: varchar
+      - name: incorporation_country_code
+        description: Country of incorporation.
+        data_type: varchar
+      - name: fiscal_year_end_mmdd
+        description: Fiscal year end as MMDD.
+        data_type: varchar
+      - name: first_filed_date
+        description: Earliest filing date loaded for the company.
+        data_type: date
+      - name: latest_filed_date
+        description: Most recent filing date loaded for the company.
+        data_type: date
+      - name: filing_count
+        description: Number of filings loaded for the company (all forms).
+        data_type: bigint
+      - name: attribute_version_count
+        description: Number of SCD2 versions in dim_company_history.
+        data_type: bigint
+
+  - name: dim_company_history
+    description: >
+      Company attributes over time (SCD Type 2), derived from the attributes
+      recorded on every filing. One row per company per attribute version;
+      valid_from inclusive, valid_to exclusive, current version valid_to NULL.
+    columns:
+      - name: company_history_key
+        description: Surrogate key (hash of CIK and valid_from).
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_key
+        description: Key of the company in dim_company.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: cik
+        description: SEC Central Index Key.
+        data_type: bigint
+        data_tests:
+          - not_null
+          # Exactly one current version per company.
+          - unique:
+              config:
+                where: "is_current"
+      - name: version_number
+        description: 1 for the earliest version, incrementing with each change.
+        data_type: bigint
+      - name: company_name
+        description: Company name during this version.
+        data_type: varchar
+      - name: sic_code
+        description: SIC code during this version.
+        data_type: integer
+      - name: sector
+        description: SIC division during this version.
+        data_type: varchar
+      - name: industry_group
+        description: SIC major group during this version.
+        data_type: varchar
+      - name: incorporation_state_code
+        description: State of incorporation during this version.
+        data_type: varchar
+      - name: incorporation_country_code
+        description: Country of incorporation during this version.
+        data_type: varchar
+      - name: fiscal_year_end_mmdd
+        description: Fiscal year end during this version.
+        data_type: varchar
+      - name: valid_from
+        description: Acceptance time of the first filing showing this version (inclusive).
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: valid_to
+        description: Start of the next version (exclusive). NULL for the current version.
+        data_type: timestamp
+      - name: is_current
+        description: True for the latest version.
+        data_type: boolean
+      - name: first_filed_date
+        description: First filing date within this version.
+        data_type: date
+      - name: last_filed_date
+        description: Last filing date within this version.
+        data_type: date
+      - name: filing_count
+        description: Filings within this version.
+        data_type: bigint
+
+  - name: dim_filing
+    description: >
+      Every SEC submission loaded, including amendments and out-of-scope forms.
+      One row per filing.
+    data_tests:
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_sec__submissions')
+    columns:
+      - name: filing_key
+        description: Surrogate key (hash of accession number).
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: company_key
+        description: Key of the filing company in dim_company.
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: filing_id
+        description: SEC accession number.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: cik
+        description: Filer's CIK.
+        data_type: bigint
+      - name: form_type
+        description: Submission type, e.g. 10-K, 10-K/A, 20-F.
+        data_type: varchar
+      - name: base_form_type
+        description: Form type without the /A suffix.
+        data_type: varchar
+      - name: is_amendment
+        description: True for an amendment (/A).
+        data_type: boolean
+      - name: period_end_date
+        description: Period the filing reports on.
+        data_type: date
+      - name: fiscal_year
+        description: Fiscal year focus.
+        data_type: integer
+      - name: fiscal_period
+        description: Fiscal period focus (FY, Q1-Q4).
+        data_type: varchar
+      - name: filed_date
+        description: Filing date.
+        data_type: date
+      - name: accepted_at
+        description: EDGAR acceptance timestamp (US Eastern).
+        data_type: timestamp
+      - name: days_to_file
+        description: Days from period end to filing date.
+        data_type: bigint
+      - name: has_financial_statements
+        description: True if the filing presents a balance sheet, income statement or cash flow statement.
+        data_type: boolean
+      - name: is_authoritative
+        description: True if this filing is the one used in the financial marts for its company-period.
+        data_type: boolean
+      - name: is_subsequently_amended
+        description: SEC prevrpt flag.
+        data_type: boolean
+      - name: source_quarter
+        description: SEC data set quarter the filing was loaded from.
+        data_type: varchar
+
+  - name: fct_financial_facts
+    description: >
+      Atomic fact table: every numeric fact loaded, at the SEC's eight-column
+      grain, including custom tags, segments and co-registrants. Incremental on
+      load time. One row per fact.
+    data_tests:
+      # Reconciliation: every staged fact is here exactly once. Fails if rows
+      # were missed, duplicated, or left behind after a source deletion
+      # (fix with --full-refresh).
+      - dbt_utils.equal_rowcount:
+          arguments:
+            compare_model: ref('stg_sec__numeric_facts')
+    columns:
+      - name: fact_key
+        description: Hash of the eight grain columns. Merge key.
+        data_type: varchar
+        data_tests: [not_null, unique]
+      - name: filing_key
+        description: Key of the filing in dim_filing.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_filing')
+                field: filing_key
+      - name: company_key
+        description: Key of the company in dim_company.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: filing_id
+        description: SEC accession number.
+        data_type: varchar
+      - name: cik
+        description: Filer's CIK.
+        data_type: bigint
+      - name: tag
+        description: XBRL element name.
+        data_type: varchar
+      - name: tag_version
+        description: Taxonomy version, or the accession number for custom tags.
+        data_type: varchar
+      - name: period_end_date
+        description: End date of the value (month-end rounded by the SEC).
+        data_type: date
+      - name: duration_quarters
+        description: Quarters covered; 0 = point in time.
+        data_type: integer
+      - name: unit_of_measure
+        description: Unit, e.g. USD or USD/shares.
+        data_type: varchar
+      - name: segments
+        description: Axis/member breakdown; NULL for the consolidated figure.
+        data_type: varchar
+      - name: coregistrant
+        description: Co-registrant; NULL for the consolidated registrant.
+        data_type: varchar
+      - name: is_consolidated
+        description: True when neither segments nor a co-registrant is set.
+        data_type: boolean
+      - name: fact_value
+        description: Value; NULL for nil or unparseable source values.
+        data_type: decimal(28,4)
+      - name: source_quarter
+        description: SEC data set quarter the fact was loaded from.
+        data_type: varchar
+      - name: loaded_at
+        description: Load timestamp; the incremental watermark.
+        data_type: timestamp
+
+unit_tests:
+  - name: test_company_history_gaps_and_islands
+    description: >
+      A -> B -> A must produce three versions, not two; dates chain without
+      gaps or overlaps; only the last version is current.
+    model: dim_company_history
+    given:
+      - input: ref('stg_sec__submissions')
+        rows:
+          - {company_id: 1, filing_id: "f1", accepted_at: "2023-01-10 16:00:00", filed_date: 2023-01-10, company_name: "ACME A", sic_code: 7372, incorporation_state_code: "DE", incorporation_country_code: "US", fiscal_year_end_mmdd: "1231"}
+          - {company_id: 1, filing_id: "f2", accepted_at: "2023-04-10 16:00:00", filed_date: 2023-04-10, company_name: "ACME A", sic_code: 7372, incorporation_state_code: "DE", incorporation_country_code: "US", fiscal_year_end_mmdd: "1231"}
+          - {company_id: 1, filing_id: "f3", accepted_at: "2023-07-10 16:00:00", filed_date: 2023-07-10, company_name: "ACME B", sic_code: 7372, incorporation_state_code: "DE", incorporation_country_code: "US", fiscal_year_end_mmdd: "1231"}
+          - {company_id: 1, filing_id: "f4", accepted_at: "2023-10-10 16:00:00", filed_date: 2023-10-10, company_name: "ACME A", sic_code: 7372, incorporation_state_code: "DE", incorporation_country_code: "US", fiscal_year_end_mmdd: "1231"}
+      - input: ref('sic_sector_mapping')
+        rows:
+          - {sic_low: 7300, sic_high: 7399, sector: "Services", industry_group: "Business Services"}
+    expect:
+      rows:
+        - {cik: 1, version_number: 1, company_name: "ACME A", sector: "Services", valid_from: "2023-01-10 16:00:00", valid_to: "2023-07-10 16:00:00", is_current: false, filing_count: 2}
+        - {cik: 1, version_number: 2, company_name: "ACME B", sector: "Services", valid_from: "2023-07-10 16:00:00", valid_to: "2023-10-10 16:00:00", is_current: false, filing_count: 1}
+        - {cik: 1, version_number: 3, company_name: "ACME A", sector: "Services", valid_from: "2023-10-10 16:00:00", valid_to: null, is_current: true, filing_count: 1}

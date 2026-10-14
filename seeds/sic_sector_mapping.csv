@@ -1,0 +1,84 @@
+sic_low,sic_high,sector,industry_group
+100,199,"Agriculture, Forestry, And Fishing",Agricultural Production Crops
+200,299,"Agriculture, Forestry, And Fishing",Agriculture Production Livestock And Animal Specialties
+700,799,"Agriculture, Forestry, And Fishing",Agricultural Services
+800,899,"Agriculture, Forestry, And Fishing",Forestry
+900,999,"Agriculture, Forestry, And Fishing","Fishing, Hunting, And Trapping"
+1000,1099,Mining,Metal Mining
+1200,1299,Mining,Coal Mining
+1300,1399,Mining,Oil And Gas Extraction
+1400,1499,Mining,"Mining And Quarrying Of Nonmetallic Minerals, Except Fuels"
+1500,1599,Construction,Building Construction General Contractors And Operative Builders
+1600,1699,Construction,Heavy Construction Other Than Building Construction Contractors
+1700,1799,Construction,Construction Special Trade Contractors
+2000,2099,Manufacturing,Food And Kindred Products
+2100,2199,Manufacturing,Tobacco Products
+2200,2299,Manufacturing,Textile Mill Products
+2300,2399,Manufacturing,Apparel And Other Finished Products Made From Fabrics And Similar Materials
+2400,2499,Manufacturing,"Lumber And Wood Products, Except Furniture"
+2500,2599,Manufacturing,Furniture And Fixtures
+2600,2699,Manufacturing,Paper And Allied Products
+2700,2799,Manufacturing,"Printing, Publishing, And Allied Industries"
+2800,2899,Manufacturing,Chemicals And Allied Products
+2900,2999,Manufacturing,Petroleum Refining And Related Industries
+3000,3099,Manufacturing,Rubber And Miscellaneous Plastics Products
+3100,3199,Manufacturing,Leather And Leather Products
+3200,3299,Manufacturing,"Stone, Clay, Glass, And Concrete Products"
+3300,3399,Manufacturing,Primary Metal Industries
+3400,3499,Manufacturing,"Fabricated Metal Products, Except Machinery And Transportation Equipment"
+3500,3599,Manufacturing,Industrial And Commercial Machinery And Computer Equipment
+3600,3699,Manufacturing,"Electronic And Other Electrical Equipment And Components, Except Computer Equipment"
+3700,3799,Manufacturing,Transportation Equipment
+3800,3899,Manufacturing,"Measuring, Analyzing, And Controlling Instruments; Photographic, Medical And Optical Goods; Watches And Clocks"
+3900,3999,Manufacturing,Miscellaneous Manufacturing Industries
+4000,4099,"Transportation, Communications, Electric, Gas, And Sanitary Services",Railroad Transportation
+4100,4199,"Transportation, Communications, Electric, Gas, And Sanitary Services",Local And Suburban Transit And Interurban Highway Passenger Transportation
+4200,4299,"Transportation, Communications, Electric, Gas, And Sanitary Services",Motor Freight Transportation And Warehousing
+4300,4399,"Transportation, Communications, Electric, Gas, And Sanitary Services",United States Postal Service
+4400,4499,"Transportation, Communications, Electric, Gas, And Sanitary Services",Water Transportation
+4500,4599,"Transportation, Communications, Electric, Gas, And Sanitary Services",Transportation By Air
+4600,4699,"Transportation, Communications, Electric, Gas, And Sanitary Services","Pipelines, Except Natural Gas"
+4700,4799,"Transportation, Communications, Electric, Gas, And Sanitary Services",Transportation Services
+4800,4899,"Transportation, Communications, Electric, Gas, And Sanitary Services",Communications
+4900,4999,"Transportation, Communications, Electric, Gas, And Sanitary Services","Electric, Gas, And Sanitary Services"
+5000,5099,Wholesale Trade,Wholesale Trade-durable Goods
+5100,5199,Wholesale Trade,Wholesale Trade-non-durable Goods
+5200,5299,Retail Trade,"Building Materials, Hardware, Garden Supply, And Mobile Home Dealers"
+5300,5399,Retail Trade,General Merchandise Stores
+5400,5499,Retail Trade,Food Stores
+5500,5599,Retail Trade,Automotive Dealers And Gasoline Service Stations
+5600,5699,Retail Trade,Apparel And Accessory Stores
+5700,5799,Retail Trade,"Home Furniture, Furnishings, And Equipment Stores"
+5800,5899,Retail Trade,Eating And Drinking Places
+5900,5999,Retail Trade,Miscellaneous Retail
+6000,6099,"Finance, Insurance, And Real Estate",Depository Institutions
+6100,6199,"Finance, Insurance, And Real Estate",Non-depository Credit Institutions
+6200,6299,"Finance, Insurance, And Real Estate","Security And Commodity Brokers, Dealers, Exchanges, And Services"
+6300,6399,"Finance, Insurance, And Real Estate",Insurance Carriers
+6400,6499,"Finance, Insurance, And Real Estate","Insurance Agents, Brokers, And Service"
+6500,6599,"Finance, Insurance, And Real Estate",Real Estate
+6700,6799,"Finance, Insurance, And Real Estate",Holding And Other Investment Offices
+7000,7099,Services,"Hotels, Rooming Houses, Camps, And Other Lodging Places"
+7200,7299,Services,Personal Services
+7300,7399,Services,Business Services
+7500,7599,Services,"Automotive Repair, Services, And Parking"
+7600,7699,Services,Miscellaneous Repair Services
+7800,7899,Services,Motion Pictures
+7900,7999,Services,Amusement And Recreation Services
+8000,8099,Services,Health Services
+8100,8199,Services,Legal Services
+8200,8299,Services,Educational Services
+8300,8399,Services,Social Services
+8400,8499,Services,"Museums, Art Galleries, And Botanical And Zoological Gardens"
+8600,8699,Services,Membership Organizations
+8700,8799,Services,"Engineering, Accounting, Research, Management, And Related Services"
+8800,8899,Services,Private Households
+8900,8999,Services,Miscellaneous Services
+9100,9199,Public Administration,"Executive, Legislative, And General Government, Except Finance"
+9200,9299,Public Administration,"Justice, Public Order, And Safety"
+9300,9399,Public Administration,"Public Finance, Taxation, And Monetary Policy"
+9400,9499,Public Administration,Administration Of Human Resource Programs
+9500,9599,Public Administration,Administration Of Environmental Quality And Housing Programs
+9600,9699,Public Administration,Administration Of Economic Programs
+9700,9799,Public Administration,National Security And International Affairs
+9900,9999,Nonclassifiable Establishments,Nonclassifiable Establishments

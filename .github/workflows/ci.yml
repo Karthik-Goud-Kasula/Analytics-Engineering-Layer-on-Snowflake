@@ -1,0 +1,110 @@
+name: CI
+
+# Offline checks on every pull request and push to main. No secrets and no
+# Snowflake account are needed: models run on a local DuckDB file loaded with
+# the synthetic sample, and the Snowflake SQL is compiled and parsed offline.
+# Real Snowflake runs live in snowflake-integration.yml (manual, opt-in).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  DBT_PROFILES_DIR: profiles
+  DBT_TARGET: local
+
+jobs:
+  checks:
+    name: Lint, test and build (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Python lint and format (ruff)
+        run: make lint-python
+
+      - name: Python unit tests (loader, layouts, sample data)
+        run: make test-python
+
+      - name: Sample data matches its generator
+        run: make check-sample-data
+
+      - name: Install dbt packages
+        run: make deps
+
+      - name: Load sample data into DuckDB
+        run: make load-sample
+
+      - name: dbt build (seeds, models, unit tests, data tests)
+        run: make build
+
+      - name: Outputs match the expected results
+        run: make test-e2e
+
+      - name: Docs, data dictionary and project rules
+        run: make check-docs
+
+      - name: SQL lint (sqlfluff, Snowflake dialect)
+        run: make lint-sql
+
+      - name: Snowflake SQL compiles and parses (offline)
+        run: make check-snowflake-sql
+
+      - name: Incremental build equals full refresh
+        run: make incremental-check
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dbt-artifacts
+          path: |
+            target/manifest.json
+            target/run_results.json
+            target/catalog.json
+            logs/dbt.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+  airflow-dag:
+    name: Airflow DAG integrity (Airflow 3.3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Airflow with its published constraints
+        run: |
+          pip install "apache-airflow==3.3.2" apache-airflow-providers-standard pytest==9.1.1 \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt"
+
+      - name: Import-test the DAG
+        env:
+          AIRFLOW_HOME: ${{ runner.temp }}/airflow
+          AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+          AIRFLOW__CORE__UNIT_TEST_MODE: "True"
+        run: python -m pytest python_tests/test_airflow_dag.py -v -p no:cacheprovider

@@ -1,0 +1,165 @@
+adsh	report	line	stmt	inpth	rfile	tag	version	plabel	negating
+0009900001-23-000003	2	1	BS	0	H	StatementOfFinancialPositionAbstract	us-gaap/2022	Statement Of Financial Position Abstract	0
+0009900001-23-000003	2	2	BS	0	H	CashAndCashEquivalentsAtCarryingValue	us-gaap/2022	Cash And Cash Equivalents At Carrying Value	0
+0009900001-23-000003	2	3	BS	0	H	ShortTermInvestments	us-gaap/2022	Short Term Investments	0
+0009900001-23-000003	2	4	BS	0	H	AccountsReceivableNetCurrent	us-gaap/2022	Accounts Receivable Net Current	0
+0009900001-23-000003	2	5	BS	0	H	AssetsCurrent	us-gaap/2022	Assets Current	0
+0009900001-23-000003	2	6	BS	0	H	Assets	us-gaap/2022	Assets	0
+0009900001-23-000003	2	7	BS	0	H	LiabilitiesCurrent	us-gaap/2022	Liabilities Current	0
+0009900001-23-000003	2	8	BS	0	H	LongTermDebtCurrent	us-gaap/2022	Long Term Debt Current	0
+0009900001-23-000003	2	9	BS	0	H	LongTermDebtNoncurrent	us-gaap/2022	Long Term Debt Noncurrent	0
+0009900001-23-000003	2	10	BS	0	H	Liabilities	us-gaap/2022	Liabilities	0
+0009900001-23-000003	2	11	BS	0	H	StockholdersEquity	us-gaap/2022	Stockholders Equity	0
+0009900001-23-000003	2	12	BS	0	H	LiabilitiesAndStockholdersEquity	us-gaap/2022	Liabilities And Stockholders Equity	0
+0009900001-23-000003	3	1	BS	1	H	AllowanceForDoubtfulAccountsReceivableCurrent	us-gaap/2022	Allowance For Doubtful Accounts Receivable Current	0
+0009900001-23-000003	4	1	IS	0	H	IncomeStatementAbstract	us-gaap/2022	Income Statement Abstract	0
+0009900001-23-000003	4	2	IS	0	H	RevenueFromContractWithCustomerExcludingAssessedTax	us-gaap/2022	Revenue From Contract With Customer Excluding Assessed Tax	0
+0009900001-23-000003	4	3	IS	0	H	CostOfRevenue	us-gaap/2022	Cost Of Revenue	0
+0009900001-23-000003	4	4	IS	0	H	GrossProfit	us-gaap/2022	Gross Profit	0
+0009900001-23-000003	4	5	IS	0	H	ResearchAndDevelopmentExpense	us-gaap/2022	Research And Development Expense	0
+0009900001-23-000003	4	6	IS	0	H	SellingGeneralAndAdministrativeExpense	us-gaap/2022	Selling General And Administrative Expense	0
+0009900001-23-000003	4	7	IS	0	H	OperatingExpenses	us-gaap/2022	Operating Expenses	0
+0009900001-23-000003	4	8	IS	0	H	OperatingIncomeLoss	us-gaap/2022	Operating Income Loss	0
+0009900001-23-000003	4	9	IS	0	H	InterestExpense	us-gaap/2022	Interest Expense	0
+0009900001-23-000003	4	10	IS	0	H	IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest	us-gaap/2022	Income Loss From Continuing Operations Before Income Taxes Extraordinary Items Noncontrolling Interest	0
+0009900001-23-000003	4	11	IS	0	H	IncomeTaxExpenseBenefit	us-gaap/2022	Income Tax Expense Benefit	0
+0009900001-23-000003	4	12	IS	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900001-23-000003	4	13	IS	0	H	EarningsPerShareBasic	us-gaap/2022	Earnings Per Share Basic	0
+0009900001-23-000003	4	14	IS	0	H	EarningsPerShareDiluted	us-gaap/2022	Earnings Per Share Diluted	0
+0009900001-23-000003	7	1	CF	0	H	StatementOfCashFlowsAbstract	us-gaap/2022	Statement Of Cash Flows Abstract	0
+0009900001-23-000003	7	2	CF	0	H	NetCashProvidedByUsedInOperatingActivities	us-gaap/2022	Net Cash Provided By Used In Operating Activities	0
+0009900001-23-000003	7	3	CF	0	H	NetCashProvidedByUsedInInvestingActivities	us-gaap/2022	Net Cash Provided By Used In Investing Activities	0
+0009900001-23-000003	7	4	CF	0	H	NetCashProvidedByUsedInFinancingActivities	us-gaap/2022	Net Cash Provided By Used In Financing Activities	0
+0009900001-23-000003	7	5	CF	0	H	PaymentsToAcquirePropertyPlantAndEquipment	us-gaap/2022	Payments To Acquire Property Plant And Equipment	0
+0009900001-23-000003	7	6	CF	0	H	DepreciationDepletionAndAmortization	us-gaap/2022	Depreciation Depletion And Amortization	0
+0009900001-23-000003	7	7	CF	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900002-23-000002	2	1	BS	0	H	StatementOfFinancialPositionAbstract	us-gaap/2022	Statement Of Financial Position Abstract	0
+0009900002-23-000002	2	2	BS	0	H	CashAndCashEquivalentsAtCarryingValue	us-gaap/2022	Cash And Cash Equivalents At Carrying Value	0
+0009900002-23-000002	2	3	BS	0	H	AccountsReceivableNetCurrent	us-gaap/2022	Accounts Receivable Net Current	0
+0009900002-23-000002	2	4	BS	0	H	AssetsCurrent	us-gaap/2022	Assets Current	0
+0009900002-23-000002	2	5	BS	0	H	Assets	us-gaap/2022	Assets	0
+0009900002-23-000002	2	6	BS	0	H	LiabilitiesCurrent	us-gaap/2022	Liabilities Current	0
+0009900002-23-000002	2	7	BS	0	H	LongTermDebtCurrent	us-gaap/2022	Long Term Debt Current	0
+0009900002-23-000002	2	8	BS	0	H	LongTermDebtNoncurrent	us-gaap/2022	Long Term Debt Noncurrent	0
+0009900002-23-000002	2	9	BS	0	H	Liabilities	us-gaap/2022	Liabilities	0
+0009900002-23-000002	2	10	BS	0	H	StockholdersEquity	us-gaap/2022	Stockholders Equity	0
+0009900002-23-000002	2	11	BS	0	H	LiabilitiesAndStockholdersEquity	us-gaap/2022	Liabilities And Stockholders Equity	0
+0009900002-23-000002	3	1	BS	1	H	AllowanceForDoubtfulAccountsReceivableCurrent	us-gaap/2022	Allowance For Doubtful Accounts Receivable Current	0
+0009900002-23-000002	4	1	IS	0	H	IncomeStatementAbstract	us-gaap/2022	Income Statement Abstract	0
+0009900002-23-000002	4	2	IS	0	H	RevenueFromContractWithCustomerExcludingAssessedTax	us-gaap/2022	Revenue From Contract With Customer Excluding Assessed Tax	0
+0009900002-23-000002	4	3	IS	0	H	CostOfRevenue	us-gaap/2022	Cost Of Revenue	0
+0009900002-23-000002	4	4	IS	0	H	GrossProfit	us-gaap/2022	Gross Profit	0
+0009900002-23-000002	4	5	IS	0	H	ResearchAndDevelopmentExpense	us-gaap/2022	Research And Development Expense	0
+0009900002-23-000002	4	6	IS	0	H	SellingGeneralAndAdministrativeExpense	us-gaap/2022	Selling General And Administrative Expense	0
+0009900002-23-000002	4	7	IS	0	H	OperatingExpenses	us-gaap/2022	Operating Expenses	0
+0009900002-23-000002	4	8	IS	0	H	OperatingIncomeLoss	us-gaap/2022	Operating Income Loss	0
+0009900002-23-000002	4	9	IS	0	H	InterestExpense	us-gaap/2022	Interest Expense	0
+0009900002-23-000002	4	10	IS	0	H	IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest	us-gaap/2022	Income Loss From Continuing Operations Before Income Taxes Extraordinary Items Noncontrolling Interest	0
+0009900002-23-000002	4	11	IS	0	H	IncomeTaxExpenseBenefit	us-gaap/2022	Income Tax Expense Benefit	0
+0009900002-23-000002	4	12	IS	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900002-23-000002	4	13	IS	0	H	EarningsPerShareBasic	us-gaap/2022	Earnings Per Share Basic	0
+0009900002-23-000002	4	14	IS	0	H	EarningsPerShareDiluted	us-gaap/2022	Earnings Per Share Diluted	0
+0009900002-23-000002	7	1	CF	0	H	StatementOfCashFlowsAbstract	us-gaap/2022	Statement Of Cash Flows Abstract	0
+0009900002-23-000002	7	2	CF	0	H	NetCashProvidedByUsedInOperatingActivities	us-gaap/2022	Net Cash Provided By Used In Operating Activities	0
+0009900002-23-000002	7	3	CF	0	H	NetCashProvidedByUsedInInvestingActivities	us-gaap/2022	Net Cash Provided By Used In Investing Activities	0
+0009900002-23-000002	7	4	CF	0	H	NetCashProvidedByUsedInFinancingActivities	us-gaap/2022	Net Cash Provided By Used In Financing Activities	0
+0009900002-23-000002	7	5	CF	0	H	PaymentsToAcquirePropertyPlantAndEquipment	us-gaap/2022	Payments To Acquire Property Plant And Equipment	0
+0009900002-23-000002	7	6	CF	0	H	DepreciationDepletionAndAmortization	us-gaap/2022	Depreciation Depletion And Amortization	0
+0009900002-23-000002	7	7	CF	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900003-23-000002	2	1	BS	0	H	StatementOfFinancialPositionAbstract	us-gaap/2022	Statement Of Financial Position Abstract	0
+0009900003-23-000002	2	2	BS	0	H	CashAndCashEquivalentsAtCarryingValue	us-gaap/2022	Cash And Cash Equivalents At Carrying Value	0
+0009900003-23-000002	2	3	BS	0	H	AccountsReceivableNetCurrent	us-gaap/2022	Accounts Receivable Net Current	0
+0009900003-23-000002	2	4	BS	0	H	InventoryNet	us-gaap/2022	Inventory Net	0
+0009900003-23-000002	2	5	BS	0	H	AssetsCurrent	us-gaap/2022	Assets Current	0
+0009900003-23-000002	2	6	BS	0	H	Assets	us-gaap/2022	Assets	0
+0009900003-23-000002	2	7	BS	0	H	LiabilitiesCurrent	us-gaap/2022	Liabilities Current	0
+0009900003-23-000002	2	8	BS	0	H	LongTermDebtNoncurrent	us-gaap/2022	Long Term Debt Noncurrent	0
+0009900003-23-000002	2	9	BS	0	H	Liabilities	us-gaap/2022	Liabilities	0
+0009900003-23-000002	2	10	BS	0	H	StockholdersEquity	us-gaap/2022	Stockholders Equity	0
+0009900003-23-000002	2	11	BS	0	H	LiabilitiesAndStockholdersEquity	us-gaap/2022	Liabilities And Stockholders Equity	0
+0009900003-23-000002	3	1	BS	1	H	AllowanceForDoubtfulAccountsReceivableCurrent	us-gaap/2022	Allowance For Doubtful Accounts Receivable Current	0
+0009900003-23-000002	4	1	IS	0	H	IncomeStatementAbstract	us-gaap/2022	Income Statement Abstract	0
+0009900003-23-000002	4	2	IS	0	H	RevenueFromContractWithCustomerExcludingAssessedTax	us-gaap/2022	Revenue From Contract With Customer Excluding Assessed Tax	0
+0009900003-23-000002	4	3	IS	0	H	CostOfRevenue	us-gaap/2022	Cost Of Revenue	0
+0009900003-23-000002	4	4	IS	0	H	GrossProfit	us-gaap/2022	Gross Profit	0
+0009900003-23-000002	4	5	IS	0	H	ResearchAndDevelopmentExpense	us-gaap/2022	Research And Development Expense	0
+0009900003-23-000002	4	6	IS	0	H	SellingGeneralAndAdministrativeExpense	us-gaap/2022	Selling General And Administrative Expense	0
+0009900003-23-000002	4	7	IS	0	H	OperatingExpenses	us-gaap/2022	Operating Expenses	0
+0009900003-23-000002	4	8	IS	0	H	OperatingIncomeLoss	us-gaap/2022	Operating Income Loss	0
+0009900003-23-000002	4	9	IS	0	H	InterestExpense	us-gaap/2022	Interest Expense	0
+0009900003-23-000002	4	10	IS	0	H	IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest	us-gaap/2022	Income Loss From Continuing Operations Before Income Taxes Extraordinary Items Noncontrolling Interest	0
+0009900003-23-000002	4	11	IS	0	H	IncomeTaxExpenseBenefit	us-gaap/2022	Income Tax Expense Benefit	0
+0009900003-23-000002	4	12	IS	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900003-23-000002	4	13	IS	0	H	EarningsPerShareBasic	us-gaap/2022	Earnings Per Share Basic	0
+0009900003-23-000002	4	14	IS	0	H	EarningsPerShareDiluted	us-gaap/2022	Earnings Per Share Diluted	0
+0009900003-23-000002	7	1	CF	0	H	StatementOfCashFlowsAbstract	us-gaap/2022	Statement Of Cash Flows Abstract	0
+0009900003-23-000002	7	2	CF	0	H	NetCashProvidedByUsedInOperatingActivities	us-gaap/2022	Net Cash Provided By Used In Operating Activities	0
+0009900003-23-000002	7	3	CF	0	H	NetCashProvidedByUsedInInvestingActivities	us-gaap/2022	Net Cash Provided By Used In Investing Activities	0
+0009900003-23-000002	7	4	CF	0	H	NetCashProvidedByUsedInFinancingActivities	us-gaap/2022	Net Cash Provided By Used In Financing Activities	0
+0009900003-23-000002	7	5	CF	0	H	PaymentsToAcquirePropertyPlantAndEquipment	us-gaap/2022	Payments To Acquire Property Plant And Equipment	0
+0009900003-23-000002	7	6	CF	0	H	DepreciationDepletionAndAmortization	us-gaap/2022	Depreciation Depletion And Amortization	0
+0009900003-23-000002	7	7	CF	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900005-23-000003	2	1	BS	0	H	StatementOfFinancialPositionAbstract	us-gaap/2022	Statement Of Financial Position Abstract	0
+0009900005-23-000003	2	2	BS	0	H	CashAndCashEquivalentsAtCarryingValue	us-gaap/2022	Cash And Cash Equivalents At Carrying Value	0
+0009900005-23-000003	2	3	BS	0	H	AccountsReceivableNetCurrent	us-gaap/2022	Accounts Receivable Net Current	0
+0009900005-23-000003	2	4	BS	0	H	AssetsCurrent	us-gaap/2022	Assets Current	0
+0009900005-23-000003	2	5	BS	0	H	Assets	us-gaap/2022	Assets	0
+0009900005-23-000003	2	6	BS	0	H	LiabilitiesCurrent	us-gaap/2022	Liabilities Current	0
+0009900005-23-000003	2	7	BS	0	H	Liabilities	us-gaap/2022	Liabilities	0
+0009900005-23-000003	2	8	BS	0	H	StockholdersEquity	us-gaap/2022	Stockholders Equity	0
+0009900005-23-000003	2	9	BS	0	H	LiabilitiesAndStockholdersEquity	us-gaap/2022	Liabilities And Stockholders Equity	0
+0009900005-23-000003	3	1	BS	1	H	AllowanceForDoubtfulAccountsReceivableCurrent	us-gaap/2022	Allowance For Doubtful Accounts Receivable Current	0
+0009900005-23-000003	4	1	IS	0	H	IncomeStatementAbstract	us-gaap/2022	Income Statement Abstract	0
+0009900005-23-000003	4	2	IS	0	H	Revenues	us-gaap/2022	Revenues	0
+0009900005-23-000003	4	3	IS	0	H	CostOfRevenue	us-gaap/2022	Cost Of Revenue	0
+0009900005-23-000003	4	4	IS	0	H	GrossProfit	us-gaap/2022	Gross Profit	0
+0009900005-23-000003	4	5	IS	0	H	ResearchAndDevelopmentExpense	us-gaap/2022	Research And Development Expense	0
+0009900005-23-000003	4	6	IS	0	H	SellingGeneralAndAdministrativeExpense	us-gaap/2022	Selling General And Administrative Expense	0
+0009900005-23-000003	4	7	IS	0	H	OperatingExpenses	us-gaap/2022	Operating Expenses	0
+0009900005-23-000003	4	8	IS	0	H	OperatingIncomeLoss	us-gaap/2022	Operating Income Loss	0
+0009900005-23-000003	4	9	IS	0	H	IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest	us-gaap/2022	Income Loss From Continuing Operations Before Income Taxes Extraordinary Items Noncontrolling Interest	0
+0009900005-23-000003	4	10	IS	0	H	IncomeTaxExpenseBenefit	us-gaap/2022	Income Tax Expense Benefit	0
+0009900005-23-000003	4	11	IS	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900005-23-000003	4	12	IS	0	H	EarningsPerShareBasic	us-gaap/2022	Earnings Per Share Basic	0
+0009900005-23-000003	4	13	IS	0	H	EarningsPerShareDiluted	us-gaap/2022	Earnings Per Share Diluted	0
+0009900005-23-000003	7	1	CF	0	H	StatementOfCashFlowsAbstract	us-gaap/2022	Statement Of Cash Flows Abstract	0
+0009900005-23-000003	7	2	CF	0	H	NetCashProvidedByUsedInOperatingActivities	us-gaap/2022	Net Cash Provided By Used In Operating Activities	0
+0009900005-23-000003	7	3	CF	0	H	NetCashProvidedByUsedInInvestingActivities	us-gaap/2022	Net Cash Provided By Used In Investing Activities	0
+0009900005-23-000003	7	4	CF	0	H	NetCashProvidedByUsedInFinancingActivities	us-gaap/2022	Net Cash Provided By Used In Financing Activities	0
+0009900005-23-000003	7	5	CF	0	H	PaymentsToAcquirePropertyPlantAndEquipment	us-gaap/2022	Payments To Acquire Property Plant And Equipment	0
+0009900005-23-000003	7	6	CF	0	H	DepreciationDepletionAndAmortization	us-gaap/2022	Depreciation Depletion And Amortization	0
+0009900005-23-000003	7	7	CF	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900006-23-000003	2	1	BS	0	H	StatementOfFinancialPositionAbstract	us-gaap/2022	Statement Of Financial Position Abstract	0
+0009900006-23-000003	2	2	BS	0	H	CashAndCashEquivalentsAtCarryingValue	us-gaap/2022	Cash And Cash Equivalents At Carrying Value	0
+0009900006-23-000003	2	3	BS	0	H	AccountsReceivableNetCurrent	us-gaap/2022	Accounts Receivable Net Current	0
+0009900006-23-000003	2	4	BS	0	H	InventoryNet	us-gaap/2022	Inventory Net	0
+0009900006-23-000003	2	5	BS	0	H	AssetsCurrent	us-gaap/2022	Assets Current	0
+0009900006-23-000003	2	6	BS	0	H	Assets	us-gaap/2022	Assets	0
+0009900006-23-000003	2	7	BS	0	H	LiabilitiesCurrent	us-gaap/2022	Liabilities Current	0
+0009900006-23-000003	2	8	BS	0	H	LongTermDebtCurrent	us-gaap/2022	Long Term Debt Current	0
+0009900006-23-000003	2	9	BS	0	H	LongTermDebtNoncurrent	us-gaap/2022	Long Term Debt Noncurrent	0
+0009900006-23-000003	2	10	BS	0	H	Liabilities	us-gaap/2022	Liabilities	0
+0009900006-23-000003	2	11	BS	0	H	StockholdersEquity	us-gaap/2022	Stockholders Equity	0
+0009900006-23-000003	2	12	BS	0	H	LiabilitiesAndStockholdersEquity	us-gaap/2022	Liabilities And Stockholders Equity	0
+0009900006-23-000003	3	1	BS	1	H	AllowanceForDoubtfulAccountsReceivableCurrent	us-gaap/2022	Allowance For Doubtful Accounts Receivable Current	0
+0009900006-23-000003	4	1	IS	0	H	IncomeStatementAbstract	us-gaap/2022	Income Statement Abstract	0
+0009900006-23-000003	4	2	IS	0	H	RevenueFromContractWithCustomerExcludingAssessedTax	us-gaap/2022	Revenue From Contract With Customer Excluding Assessed Tax	0
+0009900006-23-000003	4	3	IS	0	H	CostOfRevenue	us-gaap/2022	Cost Of Revenue	0
+0009900006-23-000003	4	4	IS	0	H	GrossProfit	us-gaap/2022	Gross Profit	0
+0009900006-23-000003	4	5	IS	0	H	ResearchAndDevelopmentExpense	us-gaap/2022	Research And Development Expense	0
+0009900006-23-000003	4	6	IS	0	H	SellingGeneralAndAdministrativeExpense	us-gaap/2022	Selling General And Administrative Expense	0
+0009900006-23-000003	4	7	IS	0	H	OperatingExpenses	us-gaap/2022	Operating Expenses	0
+0009900006-23-000003	4	8	IS	0	H	OperatingIncomeLoss	us-gaap/2022	Operating Income Loss	0
+0009900006-23-000003	4	9	IS	0	H	InterestExpense	us-gaap/2022	Interest Expense	0
+0009900006-23-000003	4	10	IS	0	H	IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest	us-gaap/2022	Income Loss From Continuing Operations Before Income Taxes Extraordinary Items Noncontrolling Interest	0
+0009900006-23-000003	4	11	IS	0	H	IncomeTaxExpenseBenefit	us-gaap/2022	Income Tax Expense Benefit	0
+0009900006-23-000003	4	12	IS	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
+0009900006-23-000003	4	13	IS	0	H	EarningsPerShareBasic	us-gaap/2022	Earnings Per Share Basic	0
+0009900006-23-000003	4	14	IS	0	H	EarningsPerShareDiluted	us-gaap/2022	Earnings Per Share Diluted	0
+0009900006-23-000003	7	1	CF	0	H	StatementOfCashFlowsAbstract	us-gaap/2022	Statement Of Cash Flows Abstract	0
+0009900006-23-000003	7	2	CF	0	H	NetCashProvidedByUsedInOperatingActivities	us-gaap/2022	Net Cash Provided By Used In Operating Activities	0
+0009900006-23-000003	7	3	CF	0	H	NetCashProvidedByUsedInInvestingActivities	us-gaap/2022	Net Cash Provided By Used In Investing Activities	0
+0009900006-23-000003	7	4	CF	0	H	NetCashProvidedByUsedInFinancingActivities	us-gaap/2022	Net Cash Provided By Used In Financing Activities	0
+0009900006-23-000003	7	5	CF	0	H	PaymentsToAcquirePropertyPlantAndEquipment	us-gaap/2022	Payments To Acquire Property Plant And Equipment	0
+0009900006-23-000003	7	6	CF	0	H	DepreciationDepletionAndAmortization	us-gaap/2022	Depreciation Depletion And Amortization	0
+0009900006-23-000003	7	7	CF	0	H	NetIncomeLoss	us-gaap/2022	Net Income Loss	0
