@@ -1,4 +1,5 @@
 target/
 dbt_packages/
+# Macros are Jinja-heavy and render differently per adapter; they are
+# exercised through the models that call them.
 macros/
-analyses/

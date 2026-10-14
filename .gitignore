@@ -1,24 +1,38 @@
+# dbt
 target/
 dbt_packages/
 logs/
 .user.yml
-profiles.yml
+# A personal profiles.yml in the repo root would shadow profiles/profiles.yml.
+# The committed profiles/profiles.yml reads every credential from env vars.
+/profiles.yml
 
-data/
+# Data: real SEC downloads and local warehouses are never committed.
+# data/sample/ (synthetic) IS committed.
+data/raw/
+data/warehouse/
 *.zip
-*.txt.gz
+*.duckdb
+*.duckdb.wal
 
+# Secrets
 .env
 *.pem
 *.p8
 *.key
 
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 .pytest_cache/
+.ruff_cache/
 
+# OS / editors
 .DS_Store
 .idea/
 .vscode/
+
+# Created by dbt's v2 parser (`dbt parse --use-v2-parser`)
+dbt_internal_packages/

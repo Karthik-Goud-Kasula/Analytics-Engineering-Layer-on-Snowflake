@@ -1,7 +1,18 @@
-dbt-core==1.8.7
-dbt-snowflake==1.8.4
-snowflake-connector-python==3.12.3
-cryptography==43.0.1
-sqlfluff==3.2.5
-sqlfluff-templater-dbt==3.2.5
-PyYAML==6.0.2
+# Runtime dependencies: dbt (Snowflake + local DuckDB adapters) and the SEC loader.
+#
+# Versions are pinned so a clone today and a clone in six months resolve the same
+# environment. dbt Core 1.12 is the actively supported 1.x line (through July 2027,
+# per https://docs.getdbt.com/docs/dbt-versions/core). To upgrade, bump one minor
+# version at a time, run `make ci`, and read the dbt upgrade guide for that version.
+#
+# Requires Python 3.10+ (tested on 3.12).
+
+dbt-core==1.12.6
+dbt-snowflake==1.12.3
+dbt-duckdb==1.11.0
+
+# Used directly by ingestion/ (also pulled in transitively by the adapters above;
+# pinned here so the loader's behaviour does not change with an adapter bump).
+snowflake-connector-python==4.8.0
+duckdb==1.5.6
+python-dotenv==1.2.4

@@ -2,10 +2,15 @@
 templater = dbt
 dialect = snowflake
 max_line_length = 120
-exclude_rules = RF04, ST06, AM04, ST07, RF01
-# RF01 excluded: sqlfluff cannot resolve dbt ref() targets, so it reports false
-# "reference not found" errors on every join.
-# AM04 excluded: select * from a CTE is intentional in staging models.
+# RF01: sqlfluff cannot resolve dbt ref() targets, so it reports false
+#       "reference not found" errors on joins.
+# RF04: SEC column names such as `value`, `tag` and `version` are keywords in
+#       some dialects but valid identifiers here.
+# AM04: `select *` from a CTE is intentional in staging and final CTEs.
+# ST06: column order follows the business meaning (keys, attributes, measures),
+#       not "simple columns first".
+# ST07: explicit ON clauses are preferred over USING for portability.
+exclude_rules = RF01, RF04, AM04, ST06, ST07
 
 [sqlfluff:indentation]
 tab_space_size = 4
@@ -14,10 +19,13 @@ indented_using_on = true
 template_blocks_indent = false
 
 [sqlfluff:templater:dbt]
+# Templating uses the offline DuckDB target, so linting needs no credentials.
+# The dialect above is still Snowflake: the rendered SQL is checked against
+# Snowflake grammar, except inside dispatched macros (see .sqlfluffignore).
 project_dir = ./
-profiles_dir = ./
+profiles_dir = ./profiles
 profile = sec_analytics
-target = dev
+target = local
 
 [sqlfluff:rules:capitalisation.keywords]
 capitalisation_policy = lower

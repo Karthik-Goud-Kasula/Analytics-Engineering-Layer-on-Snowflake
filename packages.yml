@@ -1,12 +1,7 @@
 packages:
-  - package: dbt-labs/dbt_utils
-    version: [">=1.1.0", "<2.0.0"]
-
-  - package: calogica/dbt_expectations
-    version: [">=0.10.0", "<0.11.0"]
-
-  - package: dbt-labs/codegen
-    version: [">=0.12.0", "<0.13.0"]
-
-  - package: dbt-labs/audit_helper
-    version: [">=0.12.0", "<0.13.0"]
+  # Pinned to an exact release tag so every clone resolves the same macros.
+  # Installed from GitHub rather than hub.getdbt.com so `dbt deps` only needs
+  # access to github.com; the package and version are the same either way.
+  # To upgrade: bump the tag, run `dbt deps`, commit package-lock.yml.
+  - git: "https://github.com/dbt-labs/dbt-utils.git"
+    revision: "1.4.1"

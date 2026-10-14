@@ -1,61 +1,126 @@
-.PHONY: help install deps seed run test build docs clean fresh lint check-docs load-data setup-snowflake
+# SEC Analytics -- developer commands. Run `make help` for the list.
+#
+# TARGET selects the dbt target:  local (DuckDB, default, no credentials)
+#                                  dev   (Snowflake, needs .env -- see .env.example)
 
-TARGET ?= dev
+TARGET ?= local
+QUARTERS ?= latest
 
-help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+PYTHON ?= python
+export DBT_PROFILES_DIR := $(CURDIR)/profiles
+export DBT_TARGET := $(TARGET)
 
-install:  ## Install python dependencies
-	pip install -r requirements.txt
+# Credentials in .env (Snowflake, SEC_USER_AGENT) are read by dbt and by the
+# loader themselves, so make does not parse .env. TARGET always decides the
+# target for make commands; DBT_TARGET in .env only affects direct dbt calls.
 
-deps:  ## Install dbt packages
+ifeq ($(TARGET),local)
+  LOADER_TARGET := duckdb
+else
+  LOADER_TARGET := snowflake
+endif
+
+.DEFAULT_GOAL := help
+.PHONY: help install deps sample-data check-sample-data load-sample load-sec seed build \
+        run test unit-test fresh freshness compile docs docs-serve data-dictionary \
+        check-docs lint lint-sql lint-python format test-python test-e2e \
+        incremental-check check-snowflake-sql ci clean
+
+help:  ## Show this help
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+# --- setup -------------------------------------------------------------------
+install:  ## Install Python dependencies (runtime + dev tools)
+	$(PYTHON) -m pip install -r requirements-dev.txt
+
+deps:  ## Install dbt packages (dbt_utils)
 	dbt deps
 
+# --- data --------------------------------------------------------------------
+sample-data:  ## Regenerate the synthetic sample in data/sample/
+	$(PYTHON) -m ingestion.sample_data
+
+check-sample-data:  ## Fail if data/sample/ differs from the generator
+	$(PYTHON) -m ingestion.sample_data --check
+
+load-sample:  ## Load the synthetic sample into TARGET's raw schema
+	$(PYTHON) -m ingestion.load_sec_data --target $(LOADER_TARGET) --source sample --quarters all
+
+load-sec:  ## Load real SEC quarters (QUARTERS=2024q1 2024q2 | 2023q1:2024q4 | latest)
+	$(PYTHON) -m ingestion.load_sec_data --target $(LOADER_TARGET) --source sec --quarters $(QUARTERS)
+
+# --- dbt ---------------------------------------------------------------------
 seed:  ## Load seed CSVs
 	dbt seed --target $(TARGET)
 
-run:  ## Run all models
-	dbt run --target $(TARGET)
-
-test:  ## Run all tests
-	dbt test --target $(TARGET)
-
-build:  ## Seed, run, test and snapshot in dependency order
+build:  ## Seed, run and test everything in dependency order
 	dbt build --target $(TARGET)
 
-fresh:  ## Full refresh of incremental models
+run:  ## Run models only (no tests)
+	dbt run --target $(TARGET)
+
+test:  ## Run data tests and unit tests
+	dbt test --target $(TARGET)
+
+unit-test:  ## Run dbt unit tests only
+	dbt test --target $(TARGET) --select "test_type:unit"
+
+fresh:  ## Full rebuild, including the incremental fact table
 	dbt build --target $(TARGET) --full-refresh
-
-staging:  ## Build the staging layer only
-	dbt build --target $(TARGET) --select staging
-
-marts:  ## Build marts and everything they depend on
-	dbt build --target $(TARGET) --select +marts
-
-docs:  ## Generate and serve documentation with lineage
-	dbt docs generate --target $(TARGET)
-	dbt docs serve --port 8080
 
 freshness:  ## Check source freshness
 	dbt source freshness --target $(TARGET)
 
-lint:  ## Lint SQL with sqlfluff
-	sqlfluff lint models tests --dialect snowflake
+compile:  ## Compile models and analyses to target/compiled/
+	dbt compile --target $(TARGET)
 
-fix:  ## Auto-fix lint violations
-	sqlfluff fix models tests --dialect snowflake
+docs:  ## Generate dbt docs (lineage graph, column docs)
+	dbt docs generate --target $(TARGET)
 
-check-docs:  ## Fail if any model is undocumented or untested
-	python scripts/check_model_documentation.py
+docs-serve: docs  ## Generate and serve dbt docs at http://localhost:8080
+	dbt docs serve --port 8080
 
-load-data:  ## Download and load SEC data (YEARS=2022:2024)
-	python scripts/load_sec_data.py --from-year $(word 1,$(subst :, ,$(YEARS))) --to-year $(word 2,$(subst :, ,$(YEARS)))
+data-dictionary:  ## Regenerate docs/DATA_DICTIONARY.md from the model YAML
+	dbt parse --target $(TARGET) --quiet
+	$(PYTHON) scripts/build_data_dictionary.py
 
-setup-snowflake:  ## Print the Snowflake setup scripts to run
-	@echo "Run these in a Snowflake worksheet, in order:"
-	@echo "  1. snowflake/setup/01_account_setup.sql  (as ACCOUNTADMIN)"
-	@echo "  2. snowflake/setup/02_raw_tables.sql     (as LOADER)"
+check-docs:  ## Fail if a model is undocumented/untested or docs are stale
+	dbt docs generate --target $(TARGET) --quiet
+	$(PYTHON) scripts/check_project.py --catalog
+	$(PYTHON) scripts/build_data_dictionary.py --check
 
-clean:  ## Remove dbt artifacts
+# --- quality -----------------------------------------------------------------
+lint: lint-python lint-sql  ## Lint Python and SQL
+
+lint-python:  ## ruff: Python lint and formatting check
+	ruff check ingestion scripts python_tests orchestration
+	ruff format --check ingestion scripts python_tests orchestration
+
+lint-sql:  ## sqlfluff: lint dbt models and tests (Snowflake dialect)
+	sqlfluff lint models tests analyses
+
+format:  ## Auto-fix Python formatting and SQL lint where safe
+	ruff format ingestion scripts python_tests orchestration
+	sqlfluff fix models tests analyses
+
+test-python:  ## Python unit tests (loader, layouts, sample data)
+	$(PYTHON) -m pytest python_tests --ignore=python_tests/test_expected_outputs.py
+
+test-e2e:  ## Compare built local marts with the sample spec (after build)
+	$(PYTHON) -m pytest python_tests/test_expected_outputs.py -v
+
+incremental-check:  ## Prove incremental == full refresh (local, ~2 min)
+	$(PYTHON) scripts/reconcile_incremental.py
+
+check-snowflake-sql:  ## Compile for Snowflake offline and parse every statement
+	$(PYTHON) scripts/check_snowflake_sql.py
+
+# --- everything ----------------------------------------------------------------
+ci:  ## Everything CI runs, locally and offline
+	$(MAKE) lint-python test-python check-sample-data deps
+	rm -f data/warehouse/sec_analytics.duckdb
+	$(MAKE) load-sample build test-e2e check-docs lint-sql check-snowflake-sql incremental-check TARGET=local
+
+clean:  ## Remove dbt artifacts and local warehouses
 	dbt clean
-	rm -rf logs target dbt_packages
+	rm -rf data/warehouse

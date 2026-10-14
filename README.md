@@ -1,262 +1,404 @@
-# SEC Financial Analytics — dbt on Snowflake
+# SEC Financial Analytics — an analytics engineering layer on Snowflake
 
-Modeling the SEC's public Financial Statement Data Sets into a tested, documented analytics layer: 24 dbt models across staging, intermediate and mart layers, 155 tests, orchestrated by Airflow, with CI that builds and tests every pull request against a real warehouse.
+[![CI](https://github.com/Karthik-Goud-Kasula/Analytics-Engineering-Layer-on-Snowflake/actions/workflows/ci.yml/badge.svg)](https://github.com/Karthik-Goud-Kasula/Analytics-Engineering-Layer-on-Snowflake/actions/workflows/ci.yml)
+![dbt Core 1.12](https://img.shields.io/badge/dbt_Core-1.12-orange)
+![Snowflake](https://img.shields.io/badge/warehouse-Snowflake-29B5E8)
+![DuckDB](https://img.shields.io/badge/local_%2F_CI-DuckDB-yellow)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)
 
-![dbt](https://img.shields.io/badge/dbt-1.8-orange)
-![Snowflake](https://img.shields.io/badge/snowflake-cloud-blue)
-![Airflow](https://img.shields.io/badge/airflow-2.8-teal)
-![Tests](https://img.shields.io/badge/tests-155-green)
-![License](https://img.shields.io/badge/license-MIT-lightgrey)
+Turns the SEC's public **Financial Statement Data Sets** — every number from
+every XBRL filing by US public companies — into a tested, documented star
+schema on Snowflake: one row per company per year (and quarter) with income
+statement, balance sheet and cash flow side by side, financial ratios, sector
+benchmarks, restatement tracking and data-quality scores.
+
+**Stack:** Python (ingestion) · Snowflake · dbt Core 1.12 · SQL · GitHub Actions ·
+DuckDB (offline runs) · Apache Airflow 3 (reference DAG)
+
+**At a glance**
+
+| | |
+|---|---|
+| Pipeline | SEC zip → validated, transactional load → raw → staging → intermediate → marts |
+| Models | 22 dbt models (4 staging views, 7 intermediate, 11 marts incl. one incremental fact table and an SCD2 dimension) |
+| Tests | 132 dbt data tests, 4 dbt unit tests, 50 Python tests, an end-to-end oracle test, an incremental-vs-full-refresh reconciliation |
+| Runs without credentials | `make ci` runs everything on DuckDB with a synthetic sample in about 3 minutes |
+| On Snowflake | least-privilege roles, key-pair auth, setup scripts, an opt-in integration workflow |
+
+> **Verification status, honestly:** every model, test and reconciliation passes
+> on the local DuckDB target, and every compiled model and setup script parses
+> as Snowflake SQL. The project has **not yet been run against a live Snowflake
+> account** (see [Known limitations](#known-limitations)).
+
+## Contents
+
+- [The dataset, and why it's harder than it looks](#the-dataset-and-why-its-harder-than-it-looks)
+- [Architecture](#architecture)
+- [Models](#models)
+- [Quick start (local, no credentials)](#quick-start-local-no-credentials)
+- [Running on Snowflake](#running-on-snowflake)
+- [Data quality and testing](#data-quality-and-testing)
+- [Example queries](#example-queries)
+- [Performance and cost](#performance-and-cost)
+- [CI/CD](#cicd)
+- [Repository layout](#repository-layout)
+- [Known limitations](#known-limitations)
+- [What I'd add next](#what-id-add-next)
+
+Deeper documentation: [Architecture](docs/ARCHITECTURE.md) ·
+[Modeling guide](docs/MODELING.md) · [Design decisions](docs/DECISIONS.md) ·
+[Data dictionary](docs/DATA_DICTIONARY.md) · [Expected outputs](docs/EXPECTED_OUTPUTS.md) ·
+[Troubleshooting](docs/TROUBLESHOOTING.md) · [Audit report](docs/REPOSITORY_AUDIT.md)
 
 ---
 
 ## The dataset, and why it's harder than it looks
 
-The [SEC Financial Statement Data Sets](https://www.sec.gov/dera/data/financial-statement-data-sets.html) contain every numeric fact from every XBRL filing since 2009 — millions of rows per quarter across four pipe-delimited files. It's free, real, and messy in ways that make it a genuine modeling exercise rather than a `SELECT *` demo.
+The [SEC Financial Statement Data Sets](https://www.sec.gov/data-research/sec-markets-data/financial-statement-data-sets)
+contain the numeric facts from the financial statements of every XBRL filing since
+2009, published quarterly as four tab-delimited files. Millions of rows per quarter,
+free, real, and messy in ways that make it a genuine modeling exercise rather than
+a `SELECT *` demo.
 
-Four problems have to be solved before a single number is trustworthy:
+Five problems have to be solved before a single number is trustworthy:
 
-**1. The fact grain is seven columns wide.** A single (filing, tag) pair legitimately appears many times — once per period end date, per duration, per co-registrant, per unit. Grouping on (filing, tag) alone looks correct and silently over-counts. The surrogate key in `stg_sec__numeric_facts` encodes the true grain so it can be *tested* rather than assumed.
+**1. The fact grain is eight columns wide.** A (filing, tag) pair legitimately appears
+many times — per period end date, duration, unit, segment and co-registrant.
+Grouping on (filing, tag) alone looks correct and silently over-counts. The surrogate
+key in `stg_sec__numeric_facts` encodes the true grain so it is *tested*, not assumed.
 
-**2. Annual and quarterly figures live in the same column.** `qtrs = 0` is a point-in-time balance, `qtrs = 1` is one quarter, `qtrs = 4` is a full year. Summing across them inflates revenue roughly fivefold. Every downstream model carries duration in its grain, and `assert_no_annual_quarterly_mixing.sql` fails the build if one leaks into the other.
+**2. Annual, quarterly and year-to-date figures live in the same column.** `qtrs = 0`
+is a balance, `1` a quarter, `4` a year, `2`–`3` year-to-date. Summing across them
+inflates revenue roughly fivefold. Every model carries duration in its grain.
 
-**3. There is no single revenue tag.** Depending on filer and taxonomy year, top-line revenue is `Revenues`, `RevenueFromContractWithCustomerExcludingAssessedTax`, `SalesRevenueNet`, or several others. A 68-row seed maps every known variant to a canonical concept with a priority, so the most specific tag wins when a filer reports more than one.
+**3. There is no single revenue tag.** Depending on filer and taxonomy year, revenue is
+`RevenueFromContractWithCustomerExcludingAssessedTax`, `Revenues`, `SalesRevenueNet`
+or others. A seed maps 62 tags to 33 concepts with a priority, so the most specific
+tag wins — and records which tag won, so every figure is traceable.
 
-**4. Filings get amended.** A 10-K followed by a 10-K/A means two rows for the same fiscal year. `int_filings__deduplicated` resolves to one authoritative filing — but amendments are kept in the warehouse, because `mart_restatements` compares them against their originals and a restatement that moves net income 40% is the interesting event, not noise to discard.
+**4. Filings get amended — sometimes without any numbers.** A 10-K followed by a 10-K/A
+is two filings for one year. `int_filings__deduplicated` picks one authoritative filing,
+but only among filings that *contain financial statements*: a "Part III" amendment
+(executive compensation only) is newer and would otherwise erase the year. The
+superseded filings are kept, because `mart_restatements` compares them.
+
+**5. A filing reports more than its own period.** A 10-K also contains last year's
+figures (often recast), a subsidiary's figures, and segment breakdowns. The
+classification layer keeps only the consolidated, current-period line items that
+the filer actually presented on a statement.
 
 ---
 
 ## Architecture
 
-```
-        SEC EDGAR (quarterly zip: sub, num, tag, pre)
-                          │
-                 scripts/load_sec_data.py
-                  PUT → stage → COPY INTO
-                          │
-              ┌───────────▼────────────┐
-              │  RAW_SEC  (Snowflake)  │  no casting, no cleaning
-              │  SUB  NUM  TAG  PRE    │  _loaded_at, _source_file
-              └───────────┬────────────┘
-                          │
-   ┌──────────────────────▼───────────────────────┐
-   │  STAGING  (views, 4 models)                  │
-   │  rename · cast YYYYMMDD → date · 1/0 → bool  │
-   │  no joins, no dedup, no business logic       │
-   └──────────────────────┬───────────────────────┘
-                          │
-   ┌──────────────────────▼───────────────────────┐
-   │  INTERMEDIATE  (tables, 8 models)            │
-   │  · dedupe amended filings                    │
-   │  · classify facts to statements (via pre)    │
-   │  · pivot tags → named concepts (IS/BS/CF)    │
-   │  · join IS + BS + CF at matching grain       │
-   │  · derive Q4 = annual − Q1 − Q2 − Q3         │
-   └──────────────────────┬───────────────────────┘
-                          │
-   ┌──────────────────────▼───────────────────────┐
-   │  MARTS  (tables, 12 models)                  │
-   │  core    : dim_company, dim_date,            │
-   │            dim_filing, dim_financial_tag,    │
-   │            fct_financial_facts (incremental) │
-   │  finance : annual & quarterly financials,    │
-   │            ratios, YoY growth, sector        │
-   │            benchmarks, restatements, DQ      │
-   └──────────────────────┬───────────────────────┘
-                          │
-                    BI / analysis
+```mermaid
+flowchart LR
+    SEC["sec.gov quarterly zip<br/>or data/sample/"] --> L["ingestion/<br/>validate · load · reconcile"]
+    L --> RAW[("RAW_SEC<br/>all VARCHAR")]
+    RAW --> STG["staging<br/>4 views"]
+    STG --> INT["intermediate<br/>dedupe · classify · pivot"]
+    INT --> CORE["core marts<br/>dims, SCD2, incremental facts"]
+    INT --> FIN["finance marts<br/>annual, quarterly, ratios,<br/>benchmarks, restatements, DQ"]
+    CORE --> FIN
 ```
 
-Layer contracts and the reasoning behind each decision: **[docs/MODELING.md](docs/MODELING.md)**
+* **Snowflake** is the target warehouse. **DuckDB** runs the identical dbt project
+  from a local file, so development and CI need no credentials; three expressions
+  are dispatched per warehouse and everything else is portable SQL.
+* The loader validates each file's header and field counts, then loads a quarter
+  in **one transaction** (delete, load, reconcile row counts) — re-running a quarter
+  replaces it and a failure leaves the previous load intact.
+
+Full lineage, layer contracts and the security model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
 ## Models
 
-| Layer | Model | What it does |
+| Layer | Model | Grain / purpose |
 |---|---|---|
-| staging | `stg_sec__submissions` | One row per filing, typed and renamed |
-| staging | `stg_sec__numeric_facts` | One row per numeric fact, seven-column grain |
-| staging | `stg_sec__tags` | XBRL tag dictionary per taxonomy version |
-| staging | `stg_sec__presentation` | Statement classification per fact |
+| staging | `stg_sec__submissions` | One row per filing, typed |
+| staging | `stg_sec__numeric_facts` | One row per fact at the 8-column grain |
+| staging | `stg_sec__tags` | One row per tag and taxonomy version |
+| staging | `stg_sec__presentation` | One row per rendered statement line |
 | intermediate | `int_filings__deduplicated` | One authoritative filing per company-period |
-| intermediate | `int_facts__classified` | Facts + statement + tag metadata |
-| intermediate | `int_facts__income_statement` | IS concepts pivoted to columns |
-| intermediate | `int_facts__balance_sheet` | BS concepts pivoted to columns |
-| intermediate | `int_facts__cash_flow` | CF concepts pivoted to columns |
-| intermediate | `int_companies__enriched` | Company attributes + sector + activity |
-| intermediate | `int_financials__annual` | IS + BS + CF joined per company-year |
-| intermediate | `int_financials__quarterly` | Quarterly with Q4 derived |
-| core | `dim_company` | Company dimension (Type 1) |
-| core | `dim_date` | Generated calendar dimension |
-| core | `dim_filing` | Filing dimension with days-to-file |
-| core | `dim_financial_tag` | Tag dimension with usage stats |
-| core | `fct_financial_facts` | Atomic fact table, incremental |
-| finance | `fct_company_financials_annual` | Primary analytical table |
-| finance | `fct_company_financials_quarterly` | Quarterly with QoQ / YoY |
-| finance | `fct_financial_ratios` | Profitability, liquidity, leverage, efficiency |
-| finance | `fct_yoy_growth` | YoY change and 3-year CAGR |
-| finance | `mart_sector_benchmarks` | Sector medians and percentiles |
-| finance | `mart_restatements` | Amended vs original filings |
-| finance | `mart_data_quality_summary` | Coverage by fiscal year |
+| intermediate | `int_facts__classified` | Consolidated current-period facts, one statement each |
+| intermediate | `int_facts__income_statement` | Income statement pivoted, per filing and duration |
+| intermediate | `int_facts__balance_sheet` | Balance sheet pivoted, per filing |
+| intermediate | `int_facts__cash_flow` | Cash flow pivoted, per filing and duration |
+| intermediate | `int_financials__annual` | Three statements joined, per company-year |
+| intermediate | `int_financials__quarterly` | Q1–Q3 reported, Q4 derived |
+| core | `dim_company` | Company, current attributes |
+| core | `dim_company_history` | Company attributes over time (SCD Type 2) |
+| core | `dim_filing` | Every filing, with authoritative flag and days-to-file |
+| core | `fct_financial_facts` | Every fact, **incremental** on load time |
+| finance | `fct_company_financials_annual` | **Primary analytical table**: one row per company-year |
+| finance | `fct_company_financials_quarterly` | Quarterly with derived Q4 and YoY |
+| finance | `fct_financial_ratios` | Profitability, returns, liquidity, leverage, efficiency |
+| finance | `fct_yoy_growth` | Year-over-year growth against exactly the prior year |
+| finance | `mart_sector_benchmarks` | Sector medians and quartiles (≥ 5 companies) |
+| finance | `mart_restatements` | Amendments vs originals, materiality flag |
+| finance | `mart_data_quality_summary` | Coverage by fiscal year, analysis-ready flag |
+
+Every column is documented with a type in the [data dictionary](docs/DATA_DICTIONARY.md),
+which is generated from the model YAML so it can't drift.
 
 ---
 
-## Testing
+## Quick start (local, no credentials)
 
-155 tests: 147 schema tests plus 8 singular tests. The schema tests are mostly table stakes — uniqueness, not-null, referential integrity, accepted values. The singular tests are where the domain knowledge lives:
+**Prerequisites:** Git, Python 3.10+ (tested on 3.12), `make`. No database server:
+DuckDB is a Python package.
 
-| Test | What it catches |
+```bash
+git clone https://github.com/Karthik-Goud-Kasula/Analytics-Engineering-Layer-on-Snowflake.git
+cd Analytics-Engineering-Layer-on-Snowflake
+
+python3 -m venv .venv && source .venv/bin/activate
+make install          # pinned dbt-core, adapters, sqlfluff, pytest, ruff
+make deps             # dbt_utils
+
+make load-sample      # synthetic SEC-format sample -> data/warehouse/sec_analytics.duckdb
+make build            # seeds, 22 models, 132 data tests, 4 unit tests
+make test-e2e         # compare the marts with the expected results
+```
+
+`make build` ends with `PASS=158 WARN=2 ERROR=0`. The two warnings are deliberate —
+see [Expected outputs](docs/EXPECTED_OUTPUTS.md). Then explore:
+
+```bash
+make docs-serve       # dbt docs with the lineage graph, http://localhost:8080
+python -c "import duckdb; print(duckdb.connect('data/warehouse/sec_analytics.duckdb', read_only=True).sql('select company_name, fiscal_year, revenue, net_income from analytics_marts.fct_company_financials_annual order by 1, 2'))"
+make ci               # everything CI runs, including the incremental reconciliation
+```
+
+`make help` lists every command. The sample is **synthetic**: ten fictional companies,
+each built to exercise one edge case — see [data/sample/README.md](data/sample/README.md).
+
+---
+
+## Running on Snowflake
+
+### 1. Snowflake objects (one time)
+
+Requires a user with `USERADMIN`, `SYSADMIN` and `SECURITYADMIN` (a trial account's
+admin user has them). Not `ACCOUNTADMIN`, except for an optional, commented-out
+resource monitor.
+
+1. Run [`snowflake/setup/01_account_setup.sql`](snowflake/setup/01_account_setup.sql)
+   in a Snowsight worksheet. It creates, all prefixed `SEC_`: roles `SEC_LOADER`,
+   `SEC_TRANSFORMER`, `SEC_ANALYST`; an X-Small warehouse that suspends after 60 s;
+   database `SEC_ANALYTICS_DEV` with schema `RAW_SEC`; future grants; and a service
+   user for CI. Idempotent; touches nothing that already exists.
+2. Grant yourself the roles (step 4 of the script) and set up key-pair auth:
+
+   ```bash
+   openssl genrsa 2048 | openssl pkcs8 -topk8 -inform PEM -out snowflake_rsa_key.p8 -nocrypt
+   openssl rsa -in snowflake_rsa_key.p8 -pubout -out snowflake_rsa_key.pub
+   chmod 600 snowflake_rsa_key.p8   # keep it outside the repo
+   ```
+
+   ```sql
+   alter user <YOUR_USER> set rsa_public_key = '<contents of .pub without BEGIN/END lines>';
+   ```
+
+3. As `SEC_LOADER`, run [`snowflake/setup/02_raw_tables.sql`](snowflake/setup/02_raw_tables.sql)
+   (file format, internal stage, four raw tables).
+
+### 2. Configure
+
+```bash
+cp .env.example .env      # git-ignored; read automatically by dbt and the loader
+```
+
+Set `SNOWFLAKE_ACCOUNT` (e.g. `myorg-myaccount`), `SNOWFLAKE_USER`,
+`SNOWFLAKE_PRIVATE_KEY_PATH` (absolute path) and `DBT_SNOWFLAKE_SCHEMA`
+(e.g. `dbt_karthik`). Password authentication is deliberately not supported:
+Snowflake is blocking password-only sign-in for programmatic users.
+
+### 3. Load, build, verify
+
+```bash
+make deps
+dbt debug --target dev                 # connection check
+make load-sample TARGET=dev            # sample data -> RAW_SEC
+make build TARGET=dev                  # models + tests in your dbt_<you>_* schemas
+```
+
+Then run [`snowflake/queries/verify_outputs.sql`](snowflake/queries/verify_outputs.sql);
+each query states its expected result.
+
+### 4. Real SEC data
+
+```bash
+# .env: SEC_USER_AGENT="Your Name you@example.com"  (required by the SEC)
+make load-sec TARGET=dev QUARTERS=2024q1:2024q4     # ~60-120 MB per quarter
+make build TARGET=dev
+```
+
+Load only the quarters you need: they set the size of every dev build. `QUARTERS=latest`
+loads the newest completed quarter (exits with code 99, "nothing to do", if it isn't
+published yet).
+
+---
+
+## Data quality and testing
+
+| Layer | What is checked |
 |---|---|
-| `assert_balance_sheet_balances` | A = L + E within tolerance. Breaks when tag mapping is wrong. |
-| `assert_fact_grain_is_unique` | The seven-column grain. Dropping any one column looks harmless and isn't. |
-| `assert_no_annual_quarterly_mixing` | Annual revenue smaller than a single quarter of the same year. |
-| `assert_one_authoritative_filing_per_period` | Proves the dedup logic actually worked. |
-| `assert_period_end_precedes_filing` | A filing submitted before its period ended — date parsing bug. |
-| `assert_ratios_within_plausible_bounds` | Gross margin > 100%, current ratio > 1000. |
-| `assert_no_orphan_facts` | Facts pointing at dimensions that no longer contain them. |
-| `assert_sic_ranges_do_not_overlap` | Guards the range join in the sector seed against fan-out. |
+| Ingestion | Header matches the SEC layout (by name; unknown columns rejected); every row has the right field count; loaded rows = file rows, else rollback |
+| Staging | Grain uniqueness (the 8-column `fact_key`), not-null keys, relationships, accepted values, filed date not before period end, unparseable values reported (warn) |
+| Intermediate | One authoritative filing per period; one row per filing/duration per pivot; one row per company-year and company-quarter; coverage regressions (`not_null_proportion`, a custom generic test) |
+| Marts | Surrogate key uniqueness, relationships to every dimension, SCD2 windows without gaps or overlaps, no fan-out (`equal_rowcount`), ratio plausibility (warn), balance sheet identity (warn → error past 2,000) |
+| Reconciliation | Incremental facts = staged facts; annual figures = the atomic facts they came from; Q1+Q2+Q3+Q4 = annual |
+| Unit tests (dbt) | Dedup ignores Part III amendments; tag priority and EPS unit; Q4 only from complete quarters; SCD2 A→B→A = 3 versions |
+| End to end | Every mart compared with an independent Python oracle built from the sample spec |
+| Incremental | Load in batches (incl. an out-of-order backfill and a duplicate re-delivery) ≡ full refresh, table by table |
 
-Two custom generic tests:
-
-- **`not_null_proportion`** — plain `not_null` is too strict for a public dataset where some filers genuinely omit R&D or inventory. But a column going from 95% populated to 12% is a real incident. This catches the regression without failing on legitimate sparsity.
-- **`expression_between`** — bounds on a SQL expression rather than a bare column, so derived ratios can be tested without materializing them first.
-
-**Severity is deliberate.** `assert_balance_sheet_balances` warns rather than errors: a handful of companies with minority interest or redeemable preferred will legitimately fail, and blocking deploys on those trains the team to ignore the test. It escalates to an error past 2,000 failures — at that point the mapping is broken, not the filers.
+**When a test fails:** `dbt build` skips everything downstream of a failing
+`error` test, so nothing is built on bad data; `warn` tests report and continue.
+Failing rows of the warn-level domain tests are stored in `<schema>_dbt_test__audit`.
+Fix the cause and `dbt retry`. Details: [Troubleshooting](docs/TROUBLESHOOTING.md).
 
 ---
 
-## Continuous integration
+## Example queries
 
-Every pull request runs against a real Snowflake warehouse in an isolated schema:
+Compiled examples live in [`analyses/`](analyses/) (`dbt compile`, then
+`target/compiled/sec_analytics/analyses/`): sector peer comparison, material
+restatements, growth leaders. Two more:
 
-1. **Lint** — `sqlfluff` on all models, plus a custom check that every model has a description and at least one test. An undocumented model is one nobody can safely reuse.
-2. **Slim CI build** — downloads the production `manifest.json` and runs `dbt build --select state:modified+ --defer --state`. Only changed models and their downstream dependents get built. On this project that's the difference between a 12-minute check and a 90-second one.
-3. **Isolated schema** — each PR writes to `pr_<number>`, dropped afterwards with `if: always()`. Without that cleanup, every merged PR leaves an orphaned schema behind forever.
+```sql
+-- Which companies beat their sector's median operating margin last year?
+select r.company_name, r.sector, r.operating_margin, b.median_operating_margin
+from marts.fct_financial_ratios as r
+join marts.mart_sector_benchmarks as b using (sector, fiscal_year)
+where r.fiscal_year = 2023 and r.operating_margin > b.median_operating_margin
+order by r.operating_margin - b.median_operating_margin desc;
 
-On merge to `main`, the deploy workflow builds production, runs snapshots, publishes the new `manifest.json` to S3 (which becomes tomorrow's Slim CI baseline), and pushes `dbt docs` to GitHub Pages.
+-- Quarterly revenue trend, flagging derived Q4s
+select fiscal_year, fiscal_quarter, revenue, is_derived_q4, revenue_yoy_growth_rate
+from marts.fct_company_financials_quarterly
+where company_name = 'ALDER SOFTWARE INC'
+order by fiscal_year, fiscal_quarter;
+```
+
+(`marts` = your marts schema: `analytics_marts` locally, `dbt_<you>_marts` on Snowflake.)
+Expected results for the sample data: [docs/EXPECTED_OUTPUTS.md](docs/EXPECTED_OUTPUTS.md).
 
 ---
 
-## Orchestration
+## Performance and cost
 
-`airflow/dags/sec_financials_pipeline.py` runs **monthly, not quarterly**. The SEC publishes roughly six weeks after each quarter closes but doesn't commit to a date. A monthly poll that finds nothing new is much cheaper than a quarterly schedule that misses by a week and leaves the warehouse stale for a month.
-
-The DAG resolves its own target quarter in code rather than hardcoding it, HEADs the zip before spending a task slot downloading, and raises `AirflowSkipException` — not a failure — when the quarter isn't published yet. A missing quarter is the *expected* state for most monthly runs; treating it as a failure means a red DAG most months and an alert channel everyone learns to ignore.
-
-Staging is tested before intermediate runs. Building marts on data that already failed its source tests burns warehouse credits to produce a plausible-looking wrong answer, which is worse than no answer.
+* **Compute:** one X-Small warehouse, auto-suspend after 60 s, 15-minute statement
+  timeout, optional monthly resource monitor. Query tags (`sec_analytics_dev`,
+  `sec_analytics_ci`, `sec_analytics_loader`) attribute spend.
+* **Materializations:** staging views (no storage); intermediate tables, because
+  each feeds several models; one incremental model, where a full rebuild is
+  actually expensive. dbt-snowflake creates tables as *transient* by default, so
+  rebuildable tables pay no Fail-safe storage.
+* **Incremental:** `merge` on `fact_key`, filtered on load time with a 24-hour
+  lookback — processes only newly loaded quarters.
+* **No clustering keys:** the original clustered a ratios table of a few thousand
+  rows per year; automatic clustering costs credits and pays off on very large
+  tables. The fact table's natural load order (one quarter at a time) already
+  suits its load-time filter.
+* **Loading:** files are compressed on `PUT`, loaded with one `COPY` each, and
+  removed from the stage afterwards. Dev volume is controlled by which quarters
+  you load.
 
 ---
 
-## Quick start
+## CI/CD
 
-**Prerequisites:** Python 3.10+, a Snowflake account, and a contact email for the SEC's required User-Agent.
+* [`ci.yml`](.github/workflows/ci.yml) — on every pull request and push to `main`,
+  **no secrets needed**: ruff, Python tests, sample-data reproducibility, dbt build
+  with all tests on DuckDB, end-to-end expected results, docs/data-dictionary
+  freshness, sqlfluff (Snowflake dialect), an offline compile-and-parse of every
+  model as Snowflake SQL, and the incremental reconciliation. A second job
+  import-tests the Airflow DAG against Airflow 3.3.
+* [`snowflake-integration.yml`](.github/workflows/snowflake-integration.yml) —
+  manual. Builds and tests on a real Snowflake account in a per-run schema
+  (`ci_<run id>_*`) that is always dropped afterwards. Needs repository secrets
+  `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY`.
 
-```bash
-git clone https://github.com/<your-username>/sec-analytics-dbt.git
-cd sec-analytics-dbt
-
-make install          # dbt-core, dbt-snowflake, sqlfluff
-make deps             # dbt packages
-```
-
-Set up Snowflake — run these in a worksheet, in order:
-
-```
-snowflake/setup/01_account_setup.sql   (as ACCOUNTADMIN)
-snowflake/setup/02_raw_tables.sql      (as LOADER)
-```
-
-Configure credentials:
-
-```bash
-cp profiles.yml.template ~/.dbt/profiles.yml
-export SNOWFLAKE_ACCOUNT=your_account
-export SNOWFLAKE_USER=your_user
-export SNOWFLAKE_PRIVATE_KEY_PATH=~/.ssh/snowflake_key.p8
-export SEC_USER_AGENT="Your Name your.email@example.com"   # required by SEC policy
-```
-
-Load data and build:
-
-```bash
-make load-data YEARS=2022:2024    # ~3 GB, takes a while
-make build                        # seed + run + test + snapshot
-make docs                         # lineage graph at localhost:8080
-```
-
-`dev` and `ci` targets are automatically limited to the last 3 years via the `limit_data_in_dev` macro, so a laptop build takes seconds rather than minutes. Production gets full history.
+Nothing deploys automatically. [`orchestration/airflow/dags/`](orchestration/airflow/dags/sec_financials_pipeline.py)
+holds a reference Airflow 3 DAG (weekly load-then-build); it is import-tested,
+not deployed.
 
 ---
 
 ## Repository layout
 
 ```
+├── ingestion/               Loader (validate, load, reconcile), SEC download, sample generator
+├── data/sample/             Synthetic SEC-format sample (6 quarters, 10 fictional companies)
+├── snowflake/setup/         Roles, warehouse, database, grants, raw tables, teardown
+├── snowflake/queries/       Output verification queries for Snowflake
 ├── models/
-│   ├── staging/sec/         4 models + sources.yml + models.yml
-│   ├── intermediate/        8 models + models.yml
-│   └── marts/
-│       ├── core/            5 dimensional models
-│       └── finance/         7 analytical models
-├── tests/
-│   ├── generic/             2 reusable custom tests
-│   └── *.sql                8 singular tests
-├── macros/                  safe_divide, date casting, dev limiting,
-│                            schema naming, grants, PR cleanup
-├── seeds/
-│   ├── financial_tag_mapping.csv   68 tag → concept mappings
-│   └── sic_sector_mapping.csv      65 SIC ranges → sectors
-├── snapshots/               Type 2 SCD on company attributes
-├── analyses/                Compiled but never materialized
-├── airflow/dags/            Monthly ingest + transform DAG
-├── snowflake/setup/         Warehouses, roles, grants, raw DDL
-├── scripts/                 SEC loader + documentation checker
-├── .github/workflows/       CI (Slim) and production deploy
-└── docs/
-    ├── MODELING.md          Layer contracts and design decisions
-    └── DECISIONS.md         Trade-offs, with what was rejected and why
+│   ├── staging/sec/         4 views + source and model YAML
+│   ├── intermediate/        7 models + YAML (incl. dbt unit tests)
+│   └── marts/{core,finance} 11 models + YAML
+├── macros/                  safe_divide, date parsing (dispatched), pivot helpers, CI cleanup
+├── seeds/                   Tag → concept mapping; SIC major groups → sectors
+├── tests/                   7 singular tests + 1 custom generic test
+├── analyses/                Example analytical queries (compiled, never materialized)
+├── python_tests/            pytest: loader, layouts, Snowflake loader logic, e2e oracle, DAG
+├── scripts/                 Project checks, data dictionary, incremental + Snowflake SQL checks
+├── orchestration/airflow/   Reference Airflow 3 DAG
+├── profiles/profiles.yml    dbt targets (local DuckDB, Snowflake dev/ci) — env vars only
+├── .github/workflows/       Offline CI; manual Snowflake integration
+└── docs/                    Architecture, modeling, decisions, dictionary, outputs, audit
 ```
 
 ---
 
-## Design decisions worth defending
+## Known limitations
 
-A few choices here are non-obvious enough that an interviewer will ask. Full reasoning in [docs/DECISIONS.md](docs/DECISIONS.md); the short version:
-
-**Intermediate models are tables, not ephemeral.** Several are referenced 3+ times downstream. Ephemeral would inline the same CTE into each consumer and make Snowflake recompute the identical scan every time.
-
-**Only `fct_financial_facts` is incremental.** It's the only model where a full refresh is genuinely expensive. Making everything incremental adds state, edge cases, and a whole class of "why is this row stale" bugs in exchange for saving seconds.
-
-**Every division goes through `safe_divide()`.** A company with zero equity isn't "infinitely leveraged" — its leverage ratio is *undefined*. NULL says that honestly; a huge number lies.
-
-**Ratios are NULLed where inputs make them meaningless.** Negative equity makes ROE uninterpretable, not just negative. Guarding the denominator sign prevents a distressed company from looking highly profitable.
-
-**Sector mapping is a 65-row range seed, not 8,500 rows.** SIC is inherently range-based, so a range seed is smaller in git and the honest representation. The range join is only safe because `assert_sic_ranges_do_not_overlap` guarantees no overlaps — without that test, a one-character typo silently duplicates every company in the overlap and fans out every downstream join.
-
-**Medians, not means, in sector benchmarks.** Financial ratios are heavily right-skewed. One company with a near-zero equity base drags a mean somewhere useless.
-
----
-
-## Notes before you rely on this
-
-The `dev_lookback_years` var means dev and CI see a 3-year slice. If you're comparing your output to someone else's, check which target you built against.
-
-Q4 in the quarterly mart is **derived**, not reported — there is no Q4 10-Q. Filter on `is_derived_q4` and `has_complete_quarters` before drawing conclusions from a quarterly trend.
-
-`mart_data_quality_summary.is_analysis_ready` exists because "the pipeline ran successfully" and "the data is usable" are different claims. Check it before cross-company analysis on a given year.
-
----
+* **Not yet run on a live Snowflake account.** Snowflake SQL is compiled with the
+  real adapter and parsed with two Snowflake grammars offline; the loader's
+  Snowflake path is unit-tested with a fake connection. Runtime behavior on
+  Snowflake still needs the steps in [Running on Snowflake](#running-on-snowflake).
+* **Real SEC data was not loaded during development** (the build environment could
+  not reach sec.gov); the download path is unit-tested with simulated responses.
+  Expect to extend the tag mapping when real filers use tags it doesn't cover.
+* **Scope:** US-GAAP 10-K/10-Q filers. 20-F/40-F (often IFRS) filers appear in the
+  dimensions but not the financial marts. Banks and insurers fit the model loosely
+  (no gross profit, unclassified balance sheets). Lease liabilities aren't in debt.
+* **As-reported figures:** each year comes from its own 10-K (or amendment); recasts
+  inside later filings' comparatives aren't modelled. A derived Q4 absorbs any
+  restatement between the 10-Qs and the 10-K. No quarterly cash flow (10-Qs report
+  it year-to-date).
+* Ratios use year-end, not average, balances. Sector is the SIC division (coarse).
+* Facts deleted from a re-published quarter stay in the incremental table until a
+  full refresh (a reconciliation test detects it).
 
 ## What I'd add next
 
-- **dbt-elementary** for test-result history and anomaly detection over time; a test that passes today but has been degrading for six weeks is invisible right now
-- **Snapshot the tag mapping seed** so a retroactive mapping change is auditable
-- **Unit tests** (dbt 1.8 `unit_tests:`) with fixture rows for the pivot and Q4-derivation logic, which are the two places a subtle bug would be hardest to spot
-- **Incremental `fct_company_financials_annual`** once the history outgrows a full rebuild
-- **Cross-reference against XBRL company facts API** to validate a sample of computed figures against the SEC's own rendering
+* Run the Snowflake integration workflow on a schedule, and add Slim CI
+  (`state:modified+`) once a production environment provides a baseline manifest.
+* Test-result history and anomaly detection (e.g. dbt-elementary), so a slowly
+  degrading coverage metric is visible before it fails a threshold.
+* Average-balance ratios and quarterly cash flow (differencing year-to-date values).
+* Model contracts on the finance marts, and dbt exposures for the dashboards that
+  consume them.
+* Validate a sample of computed figures against the SEC's XBRL company-facts API.
+* Build and test on dbt v2 (the project already passes the v2 parser check).
 
 ---
 
-## License
+## Author
 
-MIT — see [LICENSE](LICENSE).
+**Karthik Goud Kasula** — Data Engineer · [GitHub](https://github.com/Karthik-Goud-Kasula)
+
+Built as a portfolio project. It is not deployed at, or derived from, any employer.
+
+## License and data
+
+Code: [MIT](LICENSE). The SEC Financial Statement Data Sets are published by the
+U.S. Securities and Exchange Commission and, as a U.S. government work, are in the
+public domain; use of sec.gov is subject to the SEC's
+[fair-access policy](https://www.sec.gov/os/accessing-edgar-data). The sample data in
+`data/sample/` is synthetic and fictional. [dbt_utils](https://github.com/dbt-labs/dbt-utils)
+is a dependency under the Apache 2.0 license.

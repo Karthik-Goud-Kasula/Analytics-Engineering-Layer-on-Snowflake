@@ -1,0 +1,5 @@
+# SEC-format sample files: tab-delimited, LF line endings, and rows may end in
+# a tab (an empty last field). Keep them byte-for-byte: no CRLF conversion and
+# no whitespace "fixing", or the loader's field-count check and
+# `make check-sample-data` will (correctly) fail.
+data/sample/**/*.txt text eol=lf -whitespace

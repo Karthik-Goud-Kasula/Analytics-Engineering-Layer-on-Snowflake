@@ -1,0 +1,10 @@
+# Development and CI tooling, on top of the runtime dependencies.
+-r requirements.txt
+
+sqlfluff==4.4.0
+sqlfluff-templater-dbt==4.4.0
+pytest==9.1.1
+ruff==0.17.0
+PyYAML==6.0.3
+# Second, independent Snowflake SQL parser for scripts/check_snowflake_sql.py
+sqlglot==30.22.0
