@@ -10,7 +10,8 @@ All companies and figures are fictional.
 
 ## Build result
 
-`make build` on the local target:
+`make build` on the local target, and on Snowflake (`TARGET=dev`, verified
+2026-10-15, on the first run and on the incremental re-run) — identical:
 
 ```
 Done. PASS=158 WARN=2 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=160
