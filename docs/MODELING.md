@@ -48,6 +48,16 @@ Drop any one and the result is wrong in a way that looks fine:
 
 `stg_sec__numeric_facts` builds `fact_key` over all eight, and its `unique` test *is* the grain test.
 
+The documented key is not quite unique in practice. In 2026q1, one 10-K reported
+17 pairs of different forward-currency contracts, and the SEC published identical
+typed-dimension text for each pair (`OpenForwardForeignCurrencyContractIdentifier=,
+Wells Fargo B...`). Same eight columns, different values. Deduplicating would
+silently drop real contracts, so staging keeps both rows. `grain_ordinal` numbers
+rows that share all eight columns, and only the second and later rows get it in
+`fact_key`, so every ordinary fact keeps its key. A warn-level test reports such
+rows on each build. They are segment rows, so the consolidated financial marts
+never see them.
+
 ---
 
 ## Statement classification

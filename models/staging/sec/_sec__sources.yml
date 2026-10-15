@@ -38,8 +38,9 @@ sources:
 
       - name: num
         description: >
-          Numeric facts. One row per (adsh, tag, version, ddate, qtrs, uom,
-          segments, coreg).
+          Numeric facts. Documented as one row per (adsh, tag, version, ddate,
+          qtrs, uom, segments, coreg); real files occasionally repeat that key
+          (see stg_sec__numeric_facts.grain_ordinal).
         columns:
           - name: adsh
             data_tests:

@@ -22,7 +22,7 @@ DuckDB (offline runs) · Apache Airflow 3 (reference DAG)
 |---|---|
 | Pipeline | SEC zip → validated, transactional load → raw → staging → intermediate → marts |
 | Models | 22 dbt models (4 staging views, 7 intermediate, 11 marts incl. one incremental fact table and an SCD2 dimension) |
-| Tests | 133 dbt data tests, 4 dbt unit tests, 66 Python tests, an end-to-end oracle test, an incremental-vs-full-refresh reconciliation |
+| Tests | 134 dbt data tests, 4 dbt unit tests, 66 Python tests, an end-to-end oracle test, an incremental-vs-full-refresh reconciliation |
 | Runs without credentials | `make ci` runs everything on DuckDB with a synthetic sample in about 3 minutes |
 | On Snowflake | least-privilege roles, key-pair auth, one-statement setup script, an opt-in integration workflow |
 
@@ -31,9 +31,10 @@ DuckDB (offline runs) · Apache Airflow 3 (reference DAG)
 > the transactional loader; `dbt build` passed **twice** (`PASS=158 WARN=2 ERROR=0`
 > with that day's 160 tests, the second run exercising the incremental merge); all five
 > [verification queries](snowflake/queries/verify_outputs.sql) returned the
-> expected results when run as the read-only `SEC_ANALYST` role. A first attempt
-> with real SEC data (2026q1) found two defects, both now fixed and tested
-> ([audit §22](docs/REPOSITORY_AUDIT.md#22-first-real-sec-data-attempt-2026-10-15)).
+> expected results when run as the read-only `SEC_ANALYST` role. The first runs
+> with real SEC data (2026q1) found four problems: two defects and two places
+> where the real files break the SEC's own documentation. All four are now fixed
+> and tested ([audit §22](docs/REPOSITORY_AUDIT.md#22-first-real-sec-data-attempt-2026-10-15)).
 > A completed real-data build and the Snowflake GitHub Actions workflow are still
 > pending (see [Known limitations](#known-limitations)).
 
@@ -166,11 +167,11 @@ make install          # pinned dbt-core, adapters, sqlfluff, pytest, ruff
 make deps             # dbt_utils
 
 make load-sample      # synthetic SEC-format sample -> data/warehouse/sec_analytics.duckdb
-make build            # seeds, 22 models, 133 data tests, 4 unit tests
+make build            # seeds, 22 models, 134 data tests, 4 unit tests
 make test-e2e         # compare the marts with the expected results
 ```
 
-`make build` ends with `PASS=159 WARN=2 ERROR=0`. The two warnings are deliberate —
+`make build` ends with `PASS=160 WARN=2 ERROR=0`. The two warnings are deliberate —
 see [Expected outputs](docs/EXPECTED_OUTPUTS.md). Then explore:
 
 ```bash
@@ -249,7 +250,7 @@ password-only sign-in for programmatic users.
 make deps
 make debug TARGET=dev                  # must end with "All checks passed!"
 make load-sample TARGET=dev            # sample data -> RAW_SEC (one transaction per quarter)
-make build TARGET=dev                  # Done. PASS=159 WARN=2 ERROR=0
+make build TARGET=dev                  # Done. PASS=160 WARN=2 ERROR=0
 make build TARGET=dev                  # again: exercises the incremental merge
 ```
 
@@ -396,8 +397,8 @@ not deployed.
 ## Known limitations
 
 * **Verified on Snowflake with the synthetic sample only.** The first real-data
-  load (2026q1) downloaded and validated the files and exposed two defects, now
-  fixed; a completed real-data build is pending. Expect to extend the tag mapping
+  runs (2026q1) loaded the files and exposed four problems, now fixed; a
+  completed real-data build is pending. Expect to extend the tag mapping
   when real filers use tags it doesn't cover.
 * **The Snowflake GitHub Actions workflow has not been run.** It needs the
   repository secrets described in [CI/CD](#cicd). Pull-request CI runs offline on

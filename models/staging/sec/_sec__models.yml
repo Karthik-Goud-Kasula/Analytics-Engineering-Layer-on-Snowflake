@@ -61,9 +61,16 @@ models:
         description: True if the form type ends in /A.
         data_type: boolean
       - name: period_end_date
-        description: Balance sheet date of the reporting period (parsed from YYYYMMDD).
+        description: >
+          Balance sheet date of the reporting period (parsed from YYYYMMDD).
+          Documented by the SEC as always present, but empty for a few
+          registration statements (two F-1 filings in 2026q1).
         data_type: date
-        data_tests: [not_null]
+        data_tests:
+          # Required where the marts use it: annual and quarterly reports.
+          - not_null:
+              config:
+                where: "base_form_type in ('10-K', '10-Q')"
       - name: fiscal_year
         description: Fiscal year focus as reported by the filer.
         data_type: integer
@@ -123,9 +130,25 @@ models:
       - name: fact_key
         description: >
           Hash of the eight grain columns (adsh, tag, version, ddate, qtrs, uom,
-          segments, coreg). Its uniqueness test IS the grain test.
+          segments, coreg), plus grain_ordinal for the rare second and later rows
+          that share all eight. Its uniqueness test IS the grain test.
         data_type: varchar
         data_tests: [not_null, unique]
+      - name: grain_ordinal
+        description: >
+          1 for almost every fact. 2, 3, ... for further rows sharing all eight
+          SEC grain columns, which the SEC documents as impossible but publishes
+          (17 pairs in one 2026q1 10-K: derivative contracts with identical
+          typed-dimension text). Ordered by value, then footnote.
+        data_type: bigint
+        data_tests:
+          # Keeps the anomaly visible: the rows load, but a build reports them.
+          - accepted_values:
+              arguments:
+                values: [1]
+                quote: false
+              config:
+                severity: warn
       - name: filing_id
         description: Accession number of the filing that reported the fact.
         data_type: varchar

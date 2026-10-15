@@ -224,3 +224,13 @@ That's not how Snowflake behaves. dbt rebuilds tables and views with `CREATE OR 
 **Why:** it counts each side with `GROUP BY` on a constant, and a `GROUP BY` over an empty table returns no row at all. When both sides are empty, the test errors with `None is not of type 'integer'`; this happened on the first real-data attempt, when a failed load left the raw tables empty. When **one** side is empty, the difference is `NULL`, is coalesced to 0, and the test *passes*. That second case is exactly what a reconciliation exists to catch. `tests/generic/row_count_matches.sql` counts with plain aggregates, which always return one row.
 
 **Also:** an empty raw layer makes every other test pass on zero rows, so `assert_raw_sec_data_is_loaded` (a `dbt_utils.at_least_one` on `sub.adsh`) fails first and skips the rest, with a name that says what to do.
+
+---
+
+## 22. The SEC's documented keys are tested, not trusted
+
+**Rejected:** deduplicating facts that share the documented eight-column key; requiring `period` on every filing.
+
+**Why:** the first real quarter (2026q1) broke two documented guarantees. One 10-K has 17 pairs of facts with identical key columns but different values: separate currency contracts, whose typed-dimension identifiers the SEC published as the same text. Deduplicating would silently drop real contracts. Staging keeps them all and adds `grain_ordinal` to the key of the second and later rows only, so ordinary facts keep their keys. Two F-1 filings have no `period`. The marts only need it for 10-K and 10-Q filings, so that is where the test requires it.
+
+**Trade-off:** `grain_ordinal` is ordered by value, so if the SEC re-published one of those contracts with a corrected value, the two rows' keys could swap on reload. The fact table would still match staging (`row_count_matches`), and it only affects segment rows, never the consolidated financials. A warn-level test reports every such row, so the anomaly stays visible instead of disappearing into a dedup.

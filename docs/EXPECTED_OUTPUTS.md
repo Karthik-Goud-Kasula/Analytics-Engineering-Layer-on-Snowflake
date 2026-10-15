@@ -13,12 +13,13 @@ All companies and figures are fictional.
 `make build` on the local target, and the same on Snowflake (`TARGET=dev`):
 
 ```
-Done. PASS=159 WARN=2 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=161
+Done. PASS=160 WARN=2 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=162
 ```
 
 Snowflake was verified on 2026-10-15, on the first run and on the incremental
-re-run, with the test suite of that day (`PASS=158 ... TOTAL=160`). The one test
-added since, `assert_raw_sec_data_is_loaded`, passes whenever data is loaded.
+re-run, with the test suite of that day (`PASS=158 ... TOTAL=160`). The two tests
+added since, `assert_raw_sec_data_is_loaded` and the `grain_ordinal` check on
+`stg_sec__numeric_facts`, both pass on the sample.
 
 The two warnings are intended — they demonstrate warn-level data-quality tests:
 

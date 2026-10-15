@@ -175,6 +175,17 @@ you built anyway. Load first (`make load-sample` or `make load-sec`), then build
 Before this test existed, the same situation showed up as `None is not of type
 'integer'` errors in `dbt_utils_equal_rowcount_...` tests (see DECISIONS.md #21).
 
+**`WARN accepted_values_stg_sec__numeric_facts_grain_ordinal__False__1`**
+Some facts share all eight columns of the SEC's documented key. Both rows are
+kept, and the warning keeps that visible. Expected with real data: 2026q1 has
+17 such pairs, all in one filing. See MODELING.md > The eight-column fact grain.
+
+**`not_null_stg_sec__submissions_period_end_date` fails**
+A 10-K or 10-Q has no usable `period`, and the annual and quarterly marts need
+it. Other forms are exempt: two F-1 registration statements in 2026q1 have none,
+although the SEC documents the field as required. Find the filing with
+`select adsh, form, period from raw_sec.sub where try_to_date(period, 'YYYYMMDD') is null`.
+
 **`row_count_matches_fct_financial_facts_...` fails**
 The incremental fact table no longer matches staging, usually because a
 reloaded quarter dropped facts the table still holds. Rebuild it:

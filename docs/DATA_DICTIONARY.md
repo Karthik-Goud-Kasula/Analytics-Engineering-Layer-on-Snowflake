@@ -14,7 +14,8 @@ One row per numeric XBRL fact, at the SEC's eight-column grain. Includes every f
 
 | Column | Type | Description | Tests |
 |---|---|---|---|
-| `fact_key` | varchar | Hash of the eight grain columns (adsh, tag, version, ddate, qtrs, uom, segments, coreg). Its uniqueness test IS the grain test. | not_null, unique |
+| `fact_key` | varchar | Hash of the eight grain columns (adsh, tag, version, ddate, qtrs, uom, segments, coreg), plus grain_ordinal for the rare second and later rows that share all eight. Its uniqueness test IS the grain test. | not_null, unique |
+| `grain_ordinal` | bigint | 1 for almost every fact. 2, 3, ... for further rows sharing all eight SEC grain columns, which the SEC documents as impossible but publishes (17 pairs in one 2026q1 10-K: derivative contracts with identical typed-dimension text). Ordered by value, then footnote. | accepted_values |
 | `filing_id` | varchar | Accession number of the filing that reported the fact. | not_null, relationships |
 | `tag` | varchar | XBRL element name, e.g. NetIncomeLoss. | not_null |
 | `tag_version` | varchar | Taxonomy version (e.g. us-gaap/2023), or the accession number for custom tags. |  |
@@ -76,7 +77,7 @@ One row per SEC submission (filing), renamed and typed. Includes every form type
 | `form_type` | varchar | Submission type, e.g. 10-K, 10-Q, 10-K/A, 20-F. | not_null |
 | `base_form_type` | varchar | Form type with any /A amendment suffix removed (10-K/A -> 10-K). |  |
 | `is_amendment` | boolean | True if the form type ends in /A. |  |
-| `period_end_date` | date | Balance sheet date of the reporting period (parsed from YYYYMMDD). | not_null |
+| `period_end_date` | date | Balance sheet date of the reporting period (parsed from YYYYMMDD). Documented by the SEC as always present, but empty for a few registration statements (two F-1 filings in 2026q1). | not_null |
 | `fiscal_year` | integer | Fiscal year focus as reported by the filer. |  |
 | `fiscal_period` | varchar | Fiscal period focus (FY, Q1, Q2, Q3, Q4). | accepted_values |
 | `filed_date` | date | Date the filing was filed with the SEC. | dbt_utils.expression_is_true, not_null |

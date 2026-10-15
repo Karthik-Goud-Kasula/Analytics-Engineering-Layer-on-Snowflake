@@ -45,7 +45,7 @@ corrected the parts of the design that turned out to be wrong:
 * two design notes misdescribed dbt and Snowflake behavior (`dbt build`
   ordering; future grants).
 
-**Final state:** 22 models, 2 seeds, 133 data tests, 4 dbt unit tests, 71 Python
+**Final state:** 22 models, 2 seeds, 134 data tests, 4 dbt unit tests, 71 Python
 tests (66 + 5 Airflow DAG tests), a synthetic sample with known answers, a transactional loader for
 Snowflake and DuckDB, least-privilege Snowflake setup scripts, offline CI, and
 an opt-in Snowflake integration workflow. `make ci` passes from a clean state.
@@ -62,10 +62,13 @@ Snowflake account:
 The run found no defects in models, SQL or the loader. It did find gaps in the
 setup instructions, now fixed ([§21](#21-snowflake-verification-2026-10-15)).
 
-The first attempt to load real SEC data (2026q1) found two defects: the loader
-refused the whole quarter over two quoted rows, and `dbt_utils.equal_rowcount`
-errors on empty tables and passes when only one side is empty. Both are fixed
-and tested locally ([§22](#22-first-real-sec-data-attempt-2026-10-15)).
+The first runs with real SEC data (2026q1) found four problems, all fixed and
+tested locally ([§22](#22-first-real-sec-data-attempt-2026-10-15)):
+- the loader refused the whole quarter over two quoted rows;
+- `dbt_utils.equal_rowcount` errors on empty tables, and passes when only one
+  side is empty;
+- the SEC's documented fact key is not unique: one 10-K has 17 pairs that share it;
+- two F-1 filings have no period date, which the SEC documents as required.
 
 Not yet verified: a completed real-data build, the Snowflake GitHub Actions
 workflow, and any production deployment.
@@ -270,7 +273,7 @@ point-in-time sector in the annual fact; annual grain made explicit
 
 ## 9. Data quality gaps
 
-Original: no tests existed. Now: 133 data tests (grain, keys, relationships,
+Original: no tests existed. Now: 134 data tests (grain, keys, relationships,
 accepted values, domain rules, reconciliations, coverage) and 4 unit tests; each
 domain test exists because of a specific failure mode (see README > Data quality
 and testing). Severity is deliberate: domain checks that real filers can
@@ -522,23 +525,49 @@ on zero rows. *Fix:* `assert_raw_sec_data_is_loaded` (`dbt_utils.at_least_one`
 on `sub.adsh`) fails first and skips everything downstream (verified on an empty
 DuckDB warehouse: `FAIL 1`, 125 nodes skipped).
 
+**Second run (after the fixes above).** The load succeeded, including both
+repaired rows. `make fresh` gave `PASS=45 ERROR=2 SKIP=114`: two staging tests
+failed, and everything downstream of staging was skipped. Profiling the raw
+tables in Snowsight found:
+
+**R4 — the documented fact key is not unique (data).**
+`unique_stg_sec__numeric_facts_fact_key` failed with 17 duplicates, all in one
+10-K (`0001918712-26-000018`). They are derivative contracts whose
+typed-dimension identifier the SEC published as identical text
+(`OpenForwardForeignCurrencyContractIdentifier=, Wells Fargo B...`). The values
+differ in 16 of the 17 pairs, so these are different facts, not repeated rows.
+*Fix:* staging keeps every row. `grain_ordinal` (`row_number()` over the eight
+columns, ordered by value, then footnote) goes into `fact_key` only for the
+second and later rows, so existing keys and incremental tables are unaffected. A
+warn-level `accepted_values` test on `grain_ordinal` reports such rows on every
+build. Reproduced and verified locally with an injected duplicate: both rows are
+kept (2,117 facts, 2,117 distinct keys), and the build passes with a warning.
+
+**R5 — `period` missing (data).** `not_null_stg_sec__submissions_period_end_date`
+failed for 2 rows: an F-1 and an F-1/A with an empty `period`, which the SEC
+documents as never empty. The check that filings are not filed before their
+period end held for every form (0 violations).
+*Fix:* the not-null test applies only to 10-K and 10-Q filings, the forms the
+marts use. Verified locally: an F-1 without a period passes; a 10-K without one
+still fails.
+
 **Verification of the fixes (local, offline):** `make ci` from a clean warehouse
 exited 0. Python tests: 66 passed, including the exact 2026q1 row as a fixture.
-`dbt build`: `PASS=159 WARN=2 ERROR=0 TOTAL=161`. End-to-end oracle 8/8.
+`dbt build`: `PASS=160 WARN=2 ERROR=0 TOTAL=162`. End-to-end oracle 8/8.
 Incremental ≡ full refresh 11/11 tables. Docs check, sqlfluff and the offline
 Snowflake compile all passed. The row check costs about 10 s for a synthetic
 3.5-million-row `num.txt` with one repaired row, including writing the cleaned
 copy.
 
-**Not yet verified:** the re-run on Snowflake with real data. Results go here
-when reported.
+**Not yet verified:** a complete real-data build on Snowflake with these fixes.
+Results go here when reported.
 
 **Files:** added `tests/generic/row_count_matches.sql`. Modified:
 - `ingestion/sec_layout.py`, `ingestion/load_sec_data.py`
-- `models/staging/sec/_sec__sources.yml`
+- `models/staging/sec/_sec__sources.yml`, `_sec__models.yml`, `stg_sec__numeric_facts.sql`
 - `models/marts/core/_core__models.yml`, `models/marts/finance/_finance__models.yml`
 - `models/marts/core/fct_financial_facts.sql` (comment)
 - `python_tests/test_sec_layout.py`, `python_tests/test_loader_duckdb.py`
 - `README.md`
-- `docs/DECISIONS.md` (#17, new #21)
-- `docs/TROUBLESHOOTING.md`, `docs/EXPECTED_OUTPUTS.md`, `docs/REPOSITORY_AUDIT.md`
+- `docs/DECISIONS.md` (#17, new #21 and #22)
+- `docs/TROUBLESHOOTING.md`, `docs/EXPECTED_OUTPUTS.md`, `docs/MODELING.md`, `docs/DATA_DICTIONARY.md` (regenerated), `docs/REPOSITORY_AUDIT.md`
