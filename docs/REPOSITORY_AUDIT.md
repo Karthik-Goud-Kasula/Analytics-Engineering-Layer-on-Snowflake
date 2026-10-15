@@ -12,6 +12,11 @@ unreachable from the build environment. Everything below that says *passed* was
 executed; everything that could not be executed is listed in
 [§18](#18-tests-not-executed-and-why).
 
+**Snowflake verification (2026-10-15):** run by the repository owner against a
+Snowflake trial account from a GitHub Codespace (Python 3.14.2, dbt Core 1.12.6,
+dbt-snowflake 1.12.3), with results reported back. See
+[§21](#21-snowflake-verification-2026-10-15).
+
 ---
 
 ## 1. Executive summary
@@ -45,7 +50,20 @@ tests, a synthetic sample with known answers, a transactional loader for
 Snowflake and DuckDB, least-privilege Snowflake setup scripts, offline CI, and
 an opt-in Snowflake integration workflow. `make ci` passes from a clean state.
 Seven deliberately re-introduced defects were each caught by the test suite.
-**Verdict: locally validated** — not yet run against a live Snowflake account.
+
+**Verdict: end-to-end tested against Snowflake** (updated 2026-10-15). On a live
+Snowflake account:
+- the sample data loaded through the transactional loader;
+- `dbt build` passed twice with `PASS=158 WARN=2 ERROR=0`, the second run
+  exercising the incremental merge;
+- all five verification queries matched the expected results when run as the
+  read-only analyst role.
+
+The run found no defects in models, SQL or the loader. It did find gaps in the
+setup instructions, now fixed ([§21](#21-snowflake-verification-2026-10-15)).
+
+Not yet verified: real SEC data, the Snowflake GitHub Actions workflow, and any
+production deployment.
 
 ---
 
@@ -386,29 +404,69 @@ All run on 2026-10-14 in the environment described at the top.
 
 | Check | Status | Why | How to run it |
 |---|---|---|---|
-| Any execution on Snowflake (`dbt debug/build --target dev`, loader `--target snowflake`, setup scripts) | **NOT RUN** | No Snowflake account or credentials available | README > Running on Snowflake; then `snowflake/queries/verify_outputs.sql` |
-| `snowflake-integration.yml` | **NOT RUN** | Needs repository secrets | Actions tab → *Snowflake integration* → Run workflow |
-| Loading real SEC data | **NOT RUN** | sec.gov unreachable from the build environment; download logic tested with simulated HTTP responses only | `make load-sec TARGET=dev QUARTERS=2024q4` |
-| GitHub-hosted CI | **NOT RUN** | Changes not pushed (no authorization to push); every step was run locally instead | Push the branch (§ How to publish in the final report) |
+| Execution on Snowflake | **Done 2026-10-15**: see [§21](#21-snowflake-verification-2026-10-15) | Was not possible from the audit environment (no credentials); run by the repository owner | — |
+| `snowflake-integration.yml` | **NOT RUN** | Needs repository secrets (`SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY`) | Actions tab → *Snowflake integration* → Run workflow |
+| Loading real SEC data | **NOT RUN** | sec.gov unreachable from the audit environment; download logic tested with simulated HTTP responses only | README > Running on Snowflake > Real SEC data |
+| GitHub-hosted CI | **Ran, result not read here** | `ci.yml` runs on pull requests and on `main`. It ran when PR #1 was merged, but this session's network could not read GitHub's Actions results | Repository → Actions tab, or the CI badge on the README |
 | `dbt deps` from hub.getdbt.com | n/a | Packages now install from GitHub (verified) | — |
 | dbt v2 build | **NOT RUN** | Only the v2 *parser* check was available offline | `pip install dbt` in a separate env, `dbt build --target local` |
 
 ## 19. Remaining limitations
 
-See README > Known limitations. In short: not yet executed on Snowflake;
-real-data coverage of the tag mapping is untested; US-GAAP 10-K/10-Q scope;
+See README > Known limitations. In short: verified on Snowflake with synthetic
+data only, so real-data coverage of the tag mapping is untested; US-GAAP 10-K/10-Q scope;
 as-reported (not recast) figures; derived Q4 absorbs restatements; no quarterly
 cash flow; year-end-balance ratios; coarse sectors; source deletions need a full
 refresh of the fact table; the Airflow DAG is a reference, not deployed.
 
 ## 20. Recommended future improvements
 
-1. Run the Snowflake setup and the integration workflow once; record the result
-   here — the single most valuable next step for this project's credibility.
-2. Load two or three real quarters, review `mart_data_quality_summary`, and
-   extend `financial_tag_mapping.csv` where coverage is low.
+1. Load two or three real quarters, review `mart_data_quality_summary`, and
+   extend `financial_tag_mapping.csv` where coverage is low. Now the most
+   valuable next step.
+2. Add the repository secrets and run the Snowflake integration workflow.
 3. Slim CI (`state:modified+ --defer`) once a production environment exists.
 4. Test-result history / anomaly detection; model contracts on finance marts;
    dbt exposures for downstream dashboards.
 5. Quarterly cash flow from year-to-date differencing; average-balance ratios.
 6. Build and test on dbt v2.
+
+## 21. Snowflake verification (2026-10-15)
+
+**Environment:** Snowflake trial account, role ACCOUNTADMIN for setup.
+Run from a GitHub Codespace: Python 3.14.2, dbt Core 1.12.6, dbt-snowflake 1.12.3.
+Key-pair authentication.
+
+| Step | Result |
+|---|---|
+| Setup (`00_setup_all_in_one.sql`) | Completed: roles, warehouse, database, raw layer, future grants, CI service user |
+| `dbt debug --target dev` | All checks passed |
+| `make load-sample TARGET=dev` | 6 quarters loaded via PUT → COPY in one transaction each; row counts reconciled |
+| `make build TARGET=dev` (1st) | `PASS=158 WARN=2 ERROR=0 SKIP=0 TOTAL=160`, identical to the DuckDB build; the 2 warnings are the designed ones |
+| `make build TARGET=dev` (2nd, incremental merge) | `PASS=158 WARN=2 ERROR=0 SKIP=0 TOTAL=160` |
+| `verify_outputs.sql`, 5 queries as `SEC_ANALYST` | All 5 matched `EXPECTED_OUTPUTS.md`, which also confirms the analyst's future grants |
+
+**Code defects found by the Snowflake run: none.** Every model, test and loader
+path that had only been compiled and parsed offline ran correctly.
+
+**Setup and documentation problems found, and fixed in this update:**
+
+| # | Problem | Fix |
+|---|---|---|
+| S1 | The Snowsight editor ran only the statement under the cursor. The multi-statement setup scripts silently ran one line, which surfaced as misleading "does not exist" errors | New `snowflake/setup/00_setup_all_in_one.sql`: the setup as one Snowflake Scripting block. README now points to it; 01/02 kept, with a "Run All" warning |
+| S2 | `No active warehouse selected`: a new worksheet has no warehouse | `00_...sql` creates and selects the warehouse first; troubleshooting entry |
+| S3 | User **name** ≠ **login name**: an account created with an email address has the email as login name, so `SNOWFLAKE_USER` set to the user name gave `JWT token is invalid`. Lowercase user names also don't match unquoted SQL | `.env.example` explains login name and how to query it; troubleshooting covers name vs login name and a fingerprint check. The setup uses `current_user()` and `alter user set ...` (no name) so users never type their name |
+| S4 | `.env` kept the example key path, giving `No such file or directory` | Neutral placeholder plus a command that prints the correct absolute path; troubleshooting entry |
+| S5 | Verification queries depended on a `use database` statement | `verify_outputs.sql` is fully qualified and starts with `use role sec_analyst` |
+| S6 | Connection check needed `DBT_PROFILES_DIR` set by hand | New `make debug` target |
+
+**Files in this update:** added `snowflake/setup/00_setup_all_in_one.sql`.
+Modified:
+- `README.md` (status, Running on Snowflake, limitations)
+- `docs/TROUBLESHOOTING.md`
+- `docs/REPOSITORY_AUDIT.md`
+- `docs/EXPECTED_OUTPUTS.md`
+- `snowflake/queries/verify_outputs.sql`
+- `.env.example`
+- `Makefile`
+- `python_tests/test_sec_layout.py` (the new script's raw tables are checked against the loader layout)

@@ -21,7 +21,7 @@ else
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help install deps sample-data check-sample-data load-sample load-sec seed build \
+.PHONY: help install deps sample-data check-sample-data load-sample load-sec debug seed build \
         run test unit-test fresh freshness compile docs docs-serve data-dictionary \
         check-docs lint lint-sql lint-python format test-python test-e2e \
         incremental-check check-snowflake-sql ci clean
@@ -50,6 +50,9 @@ load-sec:  ## Load real SEC quarters (QUARTERS=2024q1 2024q2 | 2023q1:2024q4 | l
 	$(PYTHON) -m ingestion.load_sec_data --target $(LOADER_TARGET) --source sec --quarters $(QUARTERS)
 
 # --- dbt ---------------------------------------------------------------------
+debug:  ## Check the dbt profile and warehouse connection (TARGET=dev for Snowflake)
+	dbt debug --target $(TARGET)
+
 seed:  ## Load seed CSVs
 	dbt seed --target $(TARGET)
 

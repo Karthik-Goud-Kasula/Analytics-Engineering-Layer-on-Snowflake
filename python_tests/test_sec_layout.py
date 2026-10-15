@@ -77,3 +77,17 @@ def test_snowflake_raw_ddl_matches_layouts():
         assert match, f"no CREATE TABLE for {layout.table_name}"
         columns = [line.strip().split()[0] for line in match.group(1).strip().splitlines()]
         assert columns == [*layout.columns, "_source_quarter", "_source_file", "_loaded_at"]
+
+
+def test_all_in_one_setup_matches_layouts():
+    """snowflake/setup/00_setup_all_in_one.sql must define the same raw tables."""
+    sql = (REPO_ROOT / "snowflake" / "setup" / "00_setup_all_in_one.sql").read_text(encoding="utf-8")
+    for layout in LAYOUTS:
+        match = re.search(
+            rf"create table if not exists sec_analytics_dev\.raw_sec\.{layout.table_name} \((.*?)\);",
+            sql,
+            flags=re.S,
+        )
+        assert match, f"no CREATE TABLE for {layout.table_name}"
+        columns = [part.split()[0] for part in " ".join(match.group(1).split()).split(",")]
+        assert columns == [*layout.columns, "_source_quarter", "_source_file", "_loaded_at"]

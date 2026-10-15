@@ -7,8 +7,9 @@ an activated virtual environment.
 
 **`dbt: command not found` / `No module named ingestion`**
 The virtual environment isn't active, or you're not in the repository root.
-`source .venv/bin/activate`, then run commands from the root (the loader is run
-as a module: `python -m ingestion.load_sec_data`).
+Every new terminal starts without it. Run `source .venv/bin/activate` (after
+`python3 -m venv .venv && make install` the first time), then run commands from
+the root. The loader is run as a module: `python -m ingestion.load_sec_data`.
 
 **`Could not find profile named 'sec_analytics'`**
 dbt is looking in `~/.dbt/`. The profile lives in `profiles/`: use `make ...`,
@@ -46,7 +47,8 @@ load is refused rather than shifting values into the wrong columns. Re-download
 the quarter; if it persists, inspect the reported line.
 
 **`raw tables [...] not found in RAW_SEC`**
-Run `snowflake/setup/02_raw_tables.sql` as a user holding `SEC_LOADER`.
+The setup didn't complete. Run `snowflake/setup/00_setup_all_in_one.sql`
+(see [Snowflake setup in Snowsight](#snowflake-setup-in-snowsight)).
 
 **`... file has N rows but COPY loaded M`**
 The row-count reconciliation failed and the quarter's load was rolled back; the
@@ -57,32 +59,83 @@ check the `SEC_TSV` file format matches `02_raw_tables.sql`.
 Another process has the local warehouse open (often `dbt docs serve`, a SQL
 client, or a second `dbt` command). Close it and rerun.
 
+## Snowflake setup in Snowsight
+
+**Errors about the *last* line of a script you pasted, e.g. `Role 'SEC_ANALYST' does not exist or not authorized` or `User 'SEC_CI_SVC' does not exist`, with "Your primary role ACCOUNTADMIN"**
+Your editor ran only the statement under the cursor, which after pasting is the
+last one, so nothing before it ran. Use `snowflake/setup/00_setup_all_in_one.sql`:
+its main part is a single statement, so one **Run** executes all of it. For any
+other multi-statement script, use **Run All** (Ctrl/Cmd+Shift+Enter), or click
+into each statement and run them in order.
+
+**`No active warehouse selected in the current session`**
+The worksheet has no warehouse. Run `use warehouse sec_transform_wh;`, or create
+it first with statement A of `00_setup_all_in_one.sql`. A new worksheet needs
+this again. From dbt instead, the role lacks `USAGE` on the warehouse or
+`SNOWFLAKE_WAREHOUSE` names a different one.
+
+**`Cannot perform SELECT. This session does not have a current database`**
+A query used a two-part name before `use database` ran. The queries in
+`snowflake/queries/verify_outputs.sql` are fully qualified to avoid this.
+
+**`User '<NAME>' does not exist or not authorized` for your own user**
+Unquoted names are upper-cased, so a user whose name is stored in lowercase
+doesn't match. Write it in double quotes exactly as `show users` shows it, e.g.
+`"jane"`. Better, avoid typing it at all: `alter user set ...` with no name
+changes the logged-in user.
+
 ## Snowflake connection
 
-**`JWT token is invalid` / `Failed to authenticate`**
-* The public key isn't set on the user: `DESC USER <name>` should show
-  `RSA_PUBLIC_KEY_FP`. Set it with `ALTER USER ... SET RSA_PUBLIC_KEY = '...'`
-  (key body only, without the `-----BEGIN/END-----` lines).
-* `SNOWFLAKE_PRIVATE_KEY_PATH` must be an **absolute** path; dbt does not
-  expand `~`.
-* Encrypted key: set `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`. Unencrypted: leave it
-  empty.
-* `SNOWFLAKE_ACCOUNT` is the account identifier (`orgname-accountname`), not
-  the full URL.
+**`JWT token is invalid`**
+Snowflake reached your account but rejected the key. Check, in this order:
+1. **`SNOWFLAKE_USER` must be your *login name*, which can differ from your user
+   name.** Accounts created with an email address typically have the email as
+   login name (e.g. `JANE@EXAMPLE.COM`) and a different user name. Find it with:
+   ```sql
+   show users ->> select "name", "login_name" from $1 where "name" = current_user();
+   ```
+2. **The public key on your user must match your private key file.** Compare the
+   fingerprint Snowflake stores with the one computed locally:
+   ```sql
+   declare
+       stmt varchar default 'desc user "' || current_user() || '"';
+       res resultset;
+   begin
+       execute immediate stmt;
+       res := (select "property", "value" from table(result_scan(last_query_id()))
+               where "property" in ('NAME', 'LOGIN_NAME', 'RSA_PUBLIC_KEY_FP'));
+       return table(res);
+   end;
+   ```
+   ```bash
+   openssl rsa -in ~/.snowflake/snowflake_rsa_key.p8 -pubout -outform DER 2>/dev/null \
+     | openssl dgst -sha256 -binary | openssl enc -base64
+   ```
+   `RSA_PUBLIC_KEY_FP` must be `SHA256:` followed by the local value. If not,
+   re-attach: `alter user set rsa_public_key = '<key body>';` with the line from
+   README > Running on Snowflake > Key pair. A rebuilt dev container or Codespace
+   loses `~/.snowflake`, so regenerate and re-attach there.
+3. Encrypted key: set `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE`. Unencrypted: leave it
+   empty.
+
+**`[Errno 2] No such file or directory: '...snowflake_rsa_key.p8'`**
+`SNOWFLAKE_PRIVATE_KEY_PATH` in `.env` is wrong, still the example value, or
+uses `~` (dbt does not expand it). Set the absolute path printed by
+`echo "$HOME/.snowflake/snowflake_rsa_key.p8"`.
+
+**`Could not connect to Snowflake backend`**
+`SNOWFLAKE_ACCOUNT` is wrong. Use `orgname-accountname` from
+`select current_organization_name() || '-' || current_account_name();`. Don't use
+the account locator (e.g. `AB12345`) or the full URL.
 
 **`Object 'SEC_ANALYTICS_DEV.RAW_SEC.SUB' does not exist or not authorized`**
-Usually the role, not the object: dbt runs as `SEC_TRANSFORMER`, which needs
-the future grant from `01_account_setup.sql` step 3. If the raw tables were
-created before that grant existed, re-run the `grant select on all tables in
-schema ...raw_sec` line from the same script.
+Usually the role, not the object: dbt runs as `SEC_TRANSFORMER`, which reads the
+raw tables through a future grant created by the setup script. If the raw tables
+were created before that grant existed, run (as ACCOUNTADMIN)
+`grant select on all tables in schema sec_analytics_dev.raw_sec to role sec_transformer;`.
 
 **`Insufficient privileges to operate on database`** when dbt creates schemas
-`SEC_TRANSFORMER` needs `CREATE SCHEMA` on the database (step 2 of the setup
-script).
-
-**`No active warehouse selected`**
-The role lacks `USAGE` on `SEC_TRANSFORM_WH`, or `SNOWFLAKE_WAREHOUSE` names a
-different warehouse.
+`SEC_TRANSFORMER` needs `CREATE SCHEMA` on the database; re-run the setup script.
 
 ## dbt build results
 
