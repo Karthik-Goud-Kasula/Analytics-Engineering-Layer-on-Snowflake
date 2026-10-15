@@ -26,6 +26,15 @@ sources:
             data_tests:
               - not_null
               - unique
+              # Guard: building on an empty raw layer "passes" every other
+              # test on zero rows. Fail first, with a name that says why.
+              # The loader writes all four tables in one transaction, so
+              # checking sub covers num, tag and pre too.
+              - dbt_utils.at_least_one:
+                  name: assert_raw_sec_data_is_loaded
+                  description: >
+                    Fails when no SEC data has been loaded. Run make load-sample
+                    or make load-sec before building.
 
       - name: num
         description: >

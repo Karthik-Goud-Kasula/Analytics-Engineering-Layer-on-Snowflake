@@ -187,6 +187,7 @@ That's not how Snowflake behaves. dbt rebuilds tables and views with `CREATE OR 
 * **Mapped by header name:** the SEC added a column to `num.txt` in December 2024. Positional loading would have shifted every later column silently. The loader maps columns by name, accepts known optional columns that older files lack, and rejects unknown columns with a message saying what to update.
 * **Field counts checked in Python:** Snowflake ignores `ERROR_ON_COLUMN_COUNT_MISMATCH` when `COPY` uses a transformation (which the column mapping needs), so the loader counts fields itself.
 * **One transaction per quarter, then reconcile:** delete the quarter, `COPY` it with `FORCE = TRUE` (Snowflake otherwise silently skips files it loaded in the last 64 days), compare loaded rows with the file's row count, and roll back on any mismatch. Reloading a quarter replaces it; a failure leaves the previous load intact.
+* **Malformed rows: repair what is provable, set aside the rest, fail on many** *(added after the first real-data load)*. The files are unquoted, except that the SEC encloses a value containing a tab in double quotes: 2026q1 `num.txt` has two such rows (a typed-dimension label in `segments`). Read without quoting, they have one field too many. Honouring quotes everywhere is not an option, because then a company name that starts with a quote would lose it. So quotes are honoured only to re-read a row that is malformed without them. The re-read is accepted only if it yields exactly the header's field count and passes per-file checks (`num.value` numeric, `ddate` eight digits, and so on). The tab becomes a space, because the cleaned file is itself tab-delimited. Any other malformed row goes to `<file>.rejected.txt` with its line number. More than `--max-rejected-rows` (default 100) per file fails the load: that many means a format change or a corrupt download, not a few odd filings. The first version refused the whole quarter over one row, which made real data unloadable.
 
 ---
 
@@ -213,3 +214,13 @@ That's not how Snowflake behaves. dbt rebuilds tables and views with `CREATE OR 
 **Why:** the SEC data is public domain and the loader handles it, but a test fixture needs a *known answer*. The sample is ten fictional companies, each built to exercise one behaviour (an amendment, a rename, a late filer, a bank, segment rows...), generated deterministically by `ingestion/sample_data.py`. The same specification drives `python_tests/test_expected_outputs.py`, which re-derives the expected marts in plain Python — two independent implementations that must agree.
 
 **Trade-off:** synthetic data only exercises the cases someone thought of. Real-data runs (`make load-sec`) remain the way to find the rest.
+
+---
+
+## 21. Row-count reconciliation is a project test, not `dbt_utils.equal_rowcount`
+
+**Rejected:** `dbt_utils.equal_rowcount` (dbt_utils 1.4.1).
+
+**Why:** it counts each side with `GROUP BY` on a constant, and a `GROUP BY` over an empty table returns no row at all. When both sides are empty, the test errors with `None is not of type 'integer'`; this happened on the first real-data attempt, when a failed load left the raw tables empty. When **one** side is empty, the difference is `NULL`, is coalesced to 0, and the test *passes*. That second case is exactly what a reconciliation exists to catch. `tests/generic/row_count_matches.sql` counts with plain aggregates, which always return one row.
+
+**Also:** an empty raw layer makes every other test pass on zero rows, so `assert_raw_sec_data_is_loaded` (a `dbt_utils.at_least_one` on `sub.adsh`) fails first and skips the rest, with a name that says what to do.

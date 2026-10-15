@@ -12,7 +12,7 @@ models:
           arguments:
             combination_of_columns: ["cik", "fiscal_year"]
       # No fan-out and no dropped rows from the dimension joins.
-      - dbt_utils.equal_rowcount:
+      - row_count_matches:
           arguments:
             compare_model: ref('int_financials__annual')
     columns:
@@ -333,7 +333,7 @@ models:
       (a missing year never produces a two-year change). Growth rates are
       fractions, NULL when the prior-year base is zero or negative.
     data_tests:
-      - dbt_utils.equal_rowcount:
+      - row_count_matches:
           arguments:
             compare_model: ref('fct_company_financials_annual')
     columns:
@@ -414,7 +414,7 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: ["cik", "fiscal_year", "fiscal_quarter"]
-      - dbt_utils.equal_rowcount:
+      - row_count_matches:
           arguments:
             compare_model: ref('int_financials__quarterly')
     columns:

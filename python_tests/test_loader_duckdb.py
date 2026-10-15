@@ -86,12 +86,37 @@ def test_cli_exit_codes(tmp_path):
     assert main(["--target", "duckdb", "--source", "sec", "--quarters", "all", "--duckdb-path", db]) == 1
 
 
-def test_malformed_file_is_rejected_before_anything_is_loaded(tmp_path, sample_quarter):
+def _load_sample_cli(tmp_path, sample_quarter, *extra):
+    db = tmp_path / "w.duckdb"
+    code = main(["--target", "duckdb", "--source", "sample", "--sample-dir", str(sample_quarter.parent),
+                 "--download-dir", str(tmp_path / "dl"), "--duckdb-path", str(db),
+                 "--quarters", "2024q1", *extra])  # fmt: skip
+    return code, DuckDBWarehouse(db)
+
+
+def test_malformed_rows_over_the_limit_fail_before_anything_is_loaded(tmp_path, sample_quarter):
     pre = sample_quarter / "pre.txt"
     pre.write_text(pre.read_text(encoding="utf-8") + "only\ttwo\n", encoding="utf-8")
-    db = tmp_path / "w.duckdb"
-    code = main(["--target", "duckdb", "--source", "sample", "--sample-dir",
-                 str(sample_quarter.parent), "--duckdb-path", str(db), "--quarters", "2024q1"])  # fmt: skip
+    code, warehouse = _load_sample_cli(tmp_path, sample_quarter, "--max-rejected-rows", "0")
     assert code == 1
-    warehouse = DuckDBWarehouse(db)
     assert warehouse.loaded_quarters() == set()
+
+
+def test_malformed_rows_are_repaired_or_left_out_and_the_rest_loads(tmp_path, sample_quarter):
+    num = sample_quarter / "num.txt"
+    lines = num.read_text(encoding="utf-8").splitlines()
+    fields = lines[1].split("\t")
+    fields[6] = '"InvestmentIdentifier=Unfunded equity\tsecurities;"'  # quoted tab: repaired
+    lines[1] = "\t".join(fields)
+    pre = sample_quarter / "pre.txt"
+    num.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    pre.write_text(pre.read_text(encoding="utf-8") + "only\ttwo\n", encoding="utf-8")  # left out
+
+    code, warehouse = _load_sample_cli(tmp_path, sample_quarter)
+    assert code == EXIT_OK
+    assert counts(warehouse, "2024q1")["num"] == len(lines) - 1
+    value, segments = warehouse.con.execute(
+        "select value, segments from raw_sec.num where segments like 'InvestmentIdentifier%'"
+    ).fetchone()
+    assert (value, segments) == (fields[8], "InvestmentIdentifier=Unfunded equity securities;")
+    assert (tmp_path / "dl" / "_clean" / "2024q1" / "pre.rejected.txt").is_file()

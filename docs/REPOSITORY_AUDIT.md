@@ -45,8 +45,8 @@ corrected the parts of the design that turned out to be wrong:
 * two design notes misdescribed dbt and Snowflake behavior (`dbt build`
   ordering; future grants).
 
-**Final state:** 22 models, 2 seeds, 132 data tests, 4 dbt unit tests, 55 Python
-tests, a synthetic sample with known answers, a transactional loader for
+**Final state:** 22 models, 2 seeds, 133 data tests, 4 dbt unit tests, 71 Python
+tests (66 + 5 Airflow DAG tests), a synthetic sample with known answers, a transactional loader for
 Snowflake and DuckDB, least-privilege Snowflake setup scripts, offline CI, and
 an opt-in Snowflake integration workflow. `make ci` passes from a clean state.
 Seven deliberately re-introduced defects were each caught by the test suite.
@@ -62,8 +62,13 @@ Snowflake account:
 The run found no defects in models, SQL or the loader. It did find gaps in the
 setup instructions, now fixed ([§21](#21-snowflake-verification-2026-10-15)).
 
-Not yet verified: real SEC data, the Snowflake GitHub Actions workflow, and any
-production deployment.
+The first attempt to load real SEC data (2026q1) found two defects: the loader
+refused the whole quarter over two quoted rows, and `dbt_utils.equal_rowcount`
+errors on empty tables and passes when only one side is empty. Both are fixed
+and tested locally ([§22](#22-first-real-sec-data-attempt-2026-10-15)).
+
+Not yet verified: a completed real-data build, the Snowflake GitHub Actions
+workflow, and any production deployment.
 
 ---
 
@@ -265,7 +270,7 @@ point-in-time sector in the annual fact; annual grain made explicit
 
 ## 9. Data quality gaps
 
-Original: no tests existed. Now: 132 data tests (grain, keys, relationships,
+Original: no tests existed. Now: 133 data tests (grain, keys, relationships,
 accepted values, domain rules, reconciliations, coverage) and 4 unit tests; each
 domain test exists because of a specific failure mode (see README > Data quality
 and testing). Severity is deliberate: domain checks that real filers can
@@ -398,7 +403,7 @@ All run on 2026-10-14 in the environment described at the top.
 | M-4 | Original EPS bug (`unit = 'USD'`) | income-statement unit test |
 | M-5 | Derive Q4 from two quarters | Q4 unit test + 1 e2e test |
 | M-6 | Naive SCD2 grouping (A→B→A merged) | gaps-and-islands unit test |
-| M-7 | "Latest partition" incremental watermark | at the backfill step: `equal_rowcount` + annual-vs-atomic reconciliation |
+| M-7 | "Latest partition" incremental watermark | at the backfill step: row-count reconciliation (then `equal_rowcount`, now `row_count_matches`) + annual-vs-atomic reconciliation |
 
 ## 18. Tests not executed, and why
 
@@ -406,8 +411,8 @@ All run on 2026-10-14 in the environment described at the top.
 |---|---|---|---|
 | Execution on Snowflake | **Done 2026-10-15**: see [§21](#21-snowflake-verification-2026-10-15) | Was not possible from the audit environment (no credentials); run by the repository owner | — |
 | `snowflake-integration.yml` | **NOT RUN** | Needs repository secrets (`SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY`) | Actions tab → *Snowflake integration* → Run workflow |
-| Loading real SEC data | **NOT RUN** | sec.gov unreachable from the audit environment; download logic tested with simulated HTTP responses only | README > Running on Snowflake > Real SEC data |
-| GitHub-hosted CI | **Ran, result not read here** | `ci.yml` runs on pull requests and on `main`. It ran when PR #1 was merged, but this session's network could not read GitHub's Actions results | Repository → Actions tab, or the CI badge on the README |
+| Loading real SEC data | **IN PROGRESS** | First attempt (2026q1, by the owner) downloaded and validated the files, then hit two defects, now fixed ([§22](#22-first-real-sec-data-attempt-2026-10-15)); re-run pending | README > Running on Snowflake > Real SEC data |
+| GitHub-hosted CI | **Passed (owner-confirmed)** | `ci.yml` runs on pull requests and on `main`. The owner reported green checks on the Actions tab after the merges; this session's network could not read Actions results itself | Repository → Actions tab, or the CI badge on the README |
 | `dbt deps` from hub.getdbt.com | n/a | Packages now install from GitHub (verified) | — |
 | dbt v2 build | **NOT RUN** | Only the v2 *parser* check was available offline | `pip install dbt` in a separate env, `dbt build --target local` |
 
@@ -470,3 +475,70 @@ Modified:
 - `.env.example`
 - `Makefile`
 - `python_tests/test_sec_layout.py` (the new script's raw tables are checked against the loader layout)
+
+## 22. First real SEC data attempt (2026-10-15)
+
+**Run by the owner** in the same Codespace and Snowflake account as §21. The raw
+tables were emptied, then:
+`make load-sec TARGET=dev QUARTERS=2026q1` and `make fresh TARGET=dev`.
+
+| Step | Result |
+|---|---|
+| Download from sec.gov with `SEC_USER_AGENT` | OK (2026q1.zip, extracted) |
+| Header checks, all four files | OK |
+| Row checks | `sub.txt`, `tag.txt`, `pre.txt`: 0 malformed rows. `num.txt`: 2 rows with 11 fields instead of 10, so **the loader refused the quarter** and nothing was loaded |
+| `make fresh` (run anyway, on empty raw tables) | `ERROR=4`: every `dbt_utils.equal_rowcount` test failed with `None is not of type 'integer'`; 17 nodes skipped |
+
+**R1 — quoted values (loader).** Both `num.txt` rows (lines 2,451,014 and
+2,535,977, accession `0001628280-26-020991`) have a typed-dimension label in
+`segments` that contains a tab. The SEC encloses that value in double quotes:
+`"InvestmentIdentifier=Unfunded equity<TAB>securities;"`. Read without quoting,
+which the loader did on purpose (see DECISIONS #17), the value splits in two, and
+`value` and `footnote` shift one column right. The loader was right not to load
+these rows as they were. It was wrong to refuse the whole quarter over two rows
+out of millions.
+*Fix:* `sec_layout.check_rows()` re-reads only malformed rows with quote handling
+on. It accepts the result only when it has exactly the header's field count and
+passes per-file checks (`num.value` numeric, `ddate` eight digits, `qtrs`
+numeric, and similar for the other files). The tab becomes a space. Any other
+malformed row is left out and written with its line number to
+`<file>.rejected.txt`. More than `--max-rejected-rows` (default 100) per file
+still fails the load. Well-formed rows are never re-read, so a leading quote in a
+company name stays data.
+
+**R2 — empty reconciliations (dbt).** `dbt_utils.equal_rowcount` (1.4.1) counts
+with `GROUP BY` on a constant, and that returns no row for an empty table. Both
+sides empty means a NULL failure count, which is the error seen. Investigating
+it showed a worse case: **one side empty passes**, because the NULL difference is
+coalesced to 0. Reproduced locally: one row in `dim_filing` against an empty
+staging model gave PASS, with the package default and with a `fail_calc`
+override alike.
+*Fix:* `tests/generic/row_count_matches.sql` (plain aggregates, always one row)
+replaces all five uses. Locally verified: both empty → PASS, 1 vs 0 → FAIL 1,
+equal → PASS.
+
+**R3 — building on nothing (dbt).** On empty raw tables every other test passes
+on zero rows. *Fix:* `assert_raw_sec_data_is_loaded` (`dbt_utils.at_least_one`
+on `sub.adsh`) fails first and skips everything downstream (verified on an empty
+DuckDB warehouse: `FAIL 1`, 125 nodes skipped).
+
+**Verification of the fixes (local, offline):** `make ci` from a clean warehouse
+exited 0. Python tests: 66 passed, including the exact 2026q1 row as a fixture.
+`dbt build`: `PASS=159 WARN=2 ERROR=0 TOTAL=161`. End-to-end oracle 8/8.
+Incremental ≡ full refresh 11/11 tables. Docs check, sqlfluff and the offline
+Snowflake compile all passed. The row check costs about 10 s for a synthetic
+3.5-million-row `num.txt` with one repaired row, including writing the cleaned
+copy.
+
+**Not yet verified:** the re-run on Snowflake with real data. Results go here
+when reported.
+
+**Files:** added `tests/generic/row_count_matches.sql`. Modified:
+- `ingestion/sec_layout.py`, `ingestion/load_sec_data.py`
+- `models/staging/sec/_sec__sources.yml`
+- `models/marts/core/_core__models.yml`, `models/marts/finance/_finance__models.yml`
+- `models/marts/core/fct_financial_facts.sql` (comment)
+- `python_tests/test_sec_layout.py`, `python_tests/test_loader_duckdb.py`
+- `README.md`
+- `docs/DECISIONS.md` (#17, new #21)
+- `docs/TROUBLESHOOTING.md`, `docs/EXPECTED_OUTPUTS.md`, `docs/REPOSITORY_AUDIT.md`

@@ -22,18 +22,20 @@ DuckDB (offline runs) · Apache Airflow 3 (reference DAG)
 |---|---|
 | Pipeline | SEC zip → validated, transactional load → raw → staging → intermediate → marts |
 | Models | 22 dbt models (4 staging views, 7 intermediate, 11 marts incl. one incremental fact table and an SCD2 dimension) |
-| Tests | 132 dbt data tests, 4 dbt unit tests, 50 Python tests, an end-to-end oracle test, an incremental-vs-full-refresh reconciliation |
+| Tests | 133 dbt data tests, 4 dbt unit tests, 66 Python tests, an end-to-end oracle test, an incremental-vs-full-refresh reconciliation |
 | Runs without credentials | `make ci` runs everything on DuckDB with a synthetic sample in about 3 minutes |
 | On Snowflake | least-privilege roles, key-pair auth, one-statement setup script, an opt-in integration workflow |
 
 > **Verification status:** end-to-end tested against a live Snowflake account
 > (2026-10-15, dbt Core 1.12.6, dbt-snowflake 1.12.3): sample data loaded through
-> the transactional loader; `dbt build` passed **twice** (`PASS=158 WARN=2 ERROR=0`,
-> the second run exercising the incremental merge); all five
+> the transactional loader; `dbt build` passed **twice** (`PASS=158 WARN=2 ERROR=0`
+> with that day's 160 tests, the second run exercising the incremental merge); all five
 > [verification queries](snowflake/queries/verify_outputs.sql) returned the
-> expected results when run as the read-only `SEC_ANALYST` role. Not yet run on
-> real SEC data, and the Snowflake GitHub Actions workflow has not been run
-> (see [Known limitations](#known-limitations)).
+> expected results when run as the read-only `SEC_ANALYST` role. A first attempt
+> with real SEC data (2026q1) found two defects, both now fixed and tested
+> ([audit §22](docs/REPOSITORY_AUDIT.md#22-first-real-sec-data-attempt-2026-10-15)).
+> A completed real-data build and the Snowflake GitHub Actions workflow are still
+> pending (see [Known limitations](#known-limitations)).
 
 ## Contents
 
@@ -164,11 +166,11 @@ make install          # pinned dbt-core, adapters, sqlfluff, pytest, ruff
 make deps             # dbt_utils
 
 make load-sample      # synthetic SEC-format sample -> data/warehouse/sec_analytics.duckdb
-make build            # seeds, 22 models, 132 data tests, 4 unit tests
+make build            # seeds, 22 models, 133 data tests, 4 unit tests
 make test-e2e         # compare the marts with the expected results
 ```
 
-`make build` ends with `PASS=158 WARN=2 ERROR=0`. The two warnings are deliberate —
+`make build` ends with `PASS=159 WARN=2 ERROR=0`. The two warnings are deliberate —
 see [Expected outputs](docs/EXPECTED_OUTPUTS.md). Then explore:
 
 ```bash
@@ -247,7 +249,7 @@ password-only sign-in for programmatic users.
 make deps
 make debug TARGET=dev                  # must end with "All checks passed!"
 make load-sample TARGET=dev            # sample data -> RAW_SEC (one transaction per quarter)
-make build TARGET=dev                  # Done. PASS=158 WARN=2 ERROR=0
+make build TARGET=dev                  # Done. PASS=159 WARN=2 ERROR=0
 make build TARGET=dev                  # again: exercises the incremental merge
 ```
 
@@ -271,16 +273,23 @@ Load only the quarters you need: they set the size of every dev build. `QUARTERS
 loads the newest completed quarter (exits with code 99, "nothing to do", if it isn't
 published yet).
 
+Real files contain a few malformed rows, and the loader logs what it does with
+them. A value with a tab in it, which the SEC encloses in double quotes, is
+repaired (2026q1 `num.txt` has two). Anything else is left out and written to
+`data/raw/_clean/<quarter>/<file>.rejected.txt`. More than 100 in one file
+fails the load. Only build after the load succeeds: building on empty raw tables
+fails at `assert_raw_sec_data_is_loaded`.
+
 ---
 
 ## Data quality and testing
 
 | Layer | What is checked |
 |---|---|
-| Ingestion | Header matches the SEC layout (by name; unknown columns rejected); every row has the right field count; loaded rows = file rows, else rollback |
+| Ingestion | Header matches the SEC layout (by name; unknown columns rejected); rows with the wrong field count repaired when provably safe (a quoted value with a tab) or set aside, too many fails the load; loaded rows = file rows, else rollback; raw layer not empty (`assert_raw_sec_data_is_loaded`) |
 | Staging | Grain uniqueness (the 8-column `fact_key`), not-null keys, relationships, accepted values, filed date not before period end, unparseable values reported (warn) |
 | Intermediate | One authoritative filing per period; one row per filing/duration per pivot; one row per company-year and company-quarter; coverage regressions (`not_null_proportion`, a custom generic test) |
-| Marts | Surrogate key uniqueness, relationships to every dimension, SCD2 windows without gaps or overlaps, no fan-out (`equal_rowcount`), ratio plausibility (warn), balance sheet identity (warn → error past 2,000) |
+| Marts | Surrogate key uniqueness, relationships to every dimension, SCD2 windows without gaps or overlaps, no fan-out (`row_count_matches`, a custom generic test), ratio plausibility (warn), balance sheet identity (warn → error past 2,000) |
 | Reconciliation | Incremental facts = staged facts; annual figures = the atomic facts they came from; Q1+Q2+Q3+Q4 = annual |
 | Unit tests (dbt) | Dedup ignores Part III amendments; tag priority and EPS unit; Q4 only from complete quarters; SCD2 A→B→A = 3 versions |
 | End to end | Every mart compared with an independent Python oracle built from the sample spec |
@@ -386,10 +395,10 @@ not deployed.
 
 ## Known limitations
 
-* **Verified on Snowflake with the synthetic sample only.** Real SEC data has not
-  been loaded yet (the development environment could not reach sec.gov); the
-  download path is unit-tested with simulated responses. Expect to extend the tag
-  mapping when real filers use tags it doesn't cover.
+* **Verified on Snowflake with the synthetic sample only.** The first real-data
+  load (2026q1) downloaded and validated the files and exposed two defects, now
+  fixed; a completed real-data build is pending. Expect to extend the tag mapping
+  when real filers use tags it doesn't cover.
 * **The Snowflake GitHub Actions workflow has not been run.** It needs the
   repository secrets described in [CI/CD](#cicd). Pull-request CI runs offline on
   DuckDB.
