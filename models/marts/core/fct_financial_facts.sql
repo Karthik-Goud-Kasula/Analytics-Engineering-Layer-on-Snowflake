@@ -28,7 +28,7 @@
     upsert on fact_key, so a reloaded quarter replaces its rows.
 
     Hard deletes: if a reloaded quarter no longer contains a fact, the old row
-    stays here. The equal_rowcount test against stg_sec__numeric_facts detects
+    stays here. The row_count_matches test against stg_sec__numeric_facts detects
     that; the fix is `dbt build --full-refresh --select fct_financial_facts`.
 
     Only immutable attributes are stored. Mutable ones (is the filing still

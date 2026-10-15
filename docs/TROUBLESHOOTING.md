@@ -41,10 +41,25 @@ The SEC changed the file format. Add the column to `ingestion/sec_layout.py`
 and to `snowflake/setup/02_raw_tables.sql` (a test checks they agree), then
 decide whether staging should expose it.
 
-**`expected N tab-separated fields, found M`**
-A row contains an embedded tab or line break, or the file is truncated. The
-load is refused rather than shifting values into the wrong columns. Re-download
-the quarter; if it persists, inspect the reported line.
+**`N row(s) do not have M tab-separated fields (lines ...)`**
+More than `--max-rejected-rows` (default 100) rows in one file are malformed,
+so nothing was loaded. A few malformed rows are normal in real SEC files and
+are handled without failing:
+* A value containing a tab, which the SEC encloses in double quotes, is
+  **repaired**: the log says `repaired N row(s) with a double-quoted value`.
+  2026q1 `num.txt` has two such rows.
+* Anything else (an unquoted tab, a line break inside a value) is **left out**
+  and written, with its line number, to
+  `data/raw/_clean/<quarter>/<file>.rejected.txt`. The log says
+  `left out N malformed row(s)`.
+
+Hundreds of bad rows usually mean a truncated download or a format change.
+Delete `data/raw/<quarter>.zip` and reload. If it persists, look at the reported
+lines before raising the limit (`python -m ingestion.load_sec_data ...
+--max-rejected-rows 500`).
+
+Older versions of the loader stopped at the first such row with `expected 10
+tab-separated fields, found 11`. Pull the latest code.
 
 **`raw tables [...] not found in RAW_SEC`**
 The setup didn't complete. Run `snowflake/setup/00_setup_all_in_one.sql`
@@ -154,7 +169,13 @@ nothing is built on data that failed validation. `warn` tests report and let
 the build continue. Fix the cause, then `dbt retry` (re-runs only what failed or
 was skipped) or rerun `make build`.
 
-**`dbt_utils_equal_rowcount_fct_financial_facts_...` fails**
+**`FAIL 1 assert_raw_sec_data_is_loaded`, and everything else skipped**
+The raw tables are empty: nothing has been loaded, or the last load failed and
+you built anyway. Load first (`make load-sample` or `make load-sec`), then build.
+Before this test existed, the same situation showed up as `None is not of type
+'integer'` errors in `dbt_utils_equal_rowcount_...` tests (see DECISIONS.md #21).
+
+**`row_count_matches_fct_financial_facts_...` fails**
 The incremental fact table no longer matches staging, usually because a
 reloaded quarter dropped facts the table still holds. Rebuild it:
 `dbt build --full-refresh --select fct_financial_facts` (or `make fresh`).

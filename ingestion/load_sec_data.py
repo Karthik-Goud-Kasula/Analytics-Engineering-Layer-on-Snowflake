@@ -16,6 +16,11 @@ Examples:
     python -m ingestion.load_sec_data --target snowflake --source sec \
         --quarters latest --skip-if-loaded
 
+Rows with the wrong number of fields (real SEC files have a few: a value with a
+tab in it, enclosed in double quotes) are repaired when that is provably safe,
+otherwise set aside in data/raw/_clean/<quarter>/<file>.rejected.txt. More than
+--max-rejected-rows per file fails the load.
+
 Exit codes: 0 = at least one quarter loaded; 99 = nothing to do (quarter not yet
 published, or already loaded with --skip-if-loaded); 1 = error. 99 is the exit
 code Airflow's BashOperator treats as "skipped" by default.
@@ -30,7 +35,14 @@ import sys
 from pathlib import Path
 
 from ingestion.quarters import expand_quarters
-from ingestion.sec_layout import LAYOUTS, LayoutError, column_positions, count_and_check_rows, read_header
+from ingestion.sec_layout import (
+    DEFAULT_MAX_REJECTED_ROWS,
+    LAYOUTS,
+    LayoutError,
+    check_rows,
+    column_positions,
+    read_header,
+)
 from ingestion.sources import (
     QuarterNotPublished,
     download_quarter,
@@ -51,8 +63,17 @@ EXIT_ERROR = 1
 EXIT_NOTHING_TO_DO = 99
 
 
-def plan_files(quarter_dir: Path) -> list[FilePlan]:
-    """Validate the four files of one quarter. Raises LayoutError on any mismatch."""
+def plan_files(
+    quarter_dir: Path,
+    work_dir: Path | None = None,
+    max_rejected_rows: int = DEFAULT_MAX_REJECTED_ROWS,
+) -> list[FilePlan]:
+    """Validate the four files of one quarter. Raises LayoutError on any mismatch.
+
+    Files with malformed rows are loaded from a cleaned copy in `work_dir`
+    (default: `<quarter_dir>/_clean`); see sec_layout.check_rows.
+    """
+    work_dir = work_dir or quarter_dir / "_clean"
     plans = []
     for layout in LAYOUTS:
         path = quarter_dir / layout.file_name
@@ -60,8 +81,22 @@ def plan_files(quarter_dir: Path) -> list[FilePlan]:
             raise FileNotFoundError(f"{path} is missing")
         header = read_header(path)
         positions = column_positions(layout, header, path)
-        rows = count_and_check_rows(path, expected_fields=len(header))
-        plans.append(FilePlan(layout, path, positions, header, rows))
+        check = check_rows(path, layout, header, work_dir, max_rejected_rows)
+        if check.repaired:
+            LOG.warning(
+                "%s: repaired %d row(s) with a double-quoted value containing a tab "
+                "(quotes removed, tab replaced by a space)",
+                path,
+                check.repaired,
+            )
+        if check.rejected:
+            LOG.warning(
+                "%s: left out %d malformed row(s); they are in %s",
+                path,
+                check.rejected,
+                check.rejects_path,
+            )
+        plans.append(FilePlan(layout, check.path, positions, header, check.rows))
     return plans
 
 
@@ -106,6 +141,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Skip quarters already present in the warehouse instead of reloading them",
     )
+    parser.add_argument(
+        "--max-rejected-rows",
+        type=int,
+        default=DEFAULT_MAX_REJECTED_ROWS,
+        help="Malformed rows per file that may be left out before the load fails "
+        f"(default {DEFAULT_MAX_REJECTED_ROWS}; 0 = fail on any)",
+    )
     parser.add_argument("--raw-schema", default="raw_sec")
     parser.add_argument("--sample-dir", type=Path, default=DEFAULT_SAMPLE_DIR)
     parser.add_argument("--download-dir", type=Path, default=DEFAULT_DOWNLOAD_DIR)
@@ -147,7 +189,11 @@ def run(args: argparse.Namespace) -> int:
             except QuarterNotPublished as exc:
                 LOG.warning("%s", exc)
                 continue
-            plans = plan_files(quarter_dir)
+            plans = plan_files(
+                quarter_dir,
+                work_dir=args.download_dir / "_clean" / quarter,
+                max_rejected_rows=args.max_rejected_rows,
+            )
             counts = warehouse.load_quarter(quarter, plans)
             loaded_any = True
             LOG.info(

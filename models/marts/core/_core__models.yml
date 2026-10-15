@@ -128,7 +128,7 @@ models:
       Every SEC submission loaded, including amendments and out-of-scope forms.
       One row per filing.
     data_tests:
-      - dbt_utils.equal_rowcount:
+      - row_count_matches:
           arguments:
             compare_model: ref('stg_sec__submissions')
     columns:
@@ -200,7 +200,7 @@ models:
       # Reconciliation: every staged fact is here exactly once. Fails if rows
       # were missed, duplicated, or left behind after a source deletion
       # (fix with --full-refresh).
-      - dbt_utils.equal_rowcount:
+      - row_count_matches:
           arguments:
             compare_model: ref('stg_sec__numeric_facts')
     columns:
